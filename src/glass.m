@@ -612,8 +612,10 @@ static void booklandPrepareActivityWindow(void) {
     glass.wantsLayer = YES;
     glass.style = NSGlassEffectViewStyleRegular;
     glass.cornerRadius = 15;
-    glass.tintColor = [NSColor colorWithCalibratedRed:0.13 green:0.17
-                                                 blue:0.23 alpha:0.08];
+    // Match the open island's regular glass tint. The material still samples
+    // the wallpaper beneath this separate window.
+    glass.tintColor = [NSColor colorWithCalibratedRed:0.46 green:0.50
+                                                 blue:0.58 alpha:0.08];
     NSTextField *label = [[NSTextField alloc] initWithFrame:NSMakeRect(12, 6, 96, 18)];
     label.editable = NO;
     label.selectable = NO;
@@ -623,6 +625,11 @@ static void booklandPrepareActivityWindow(void) {
     label.alignment = NSTextAlignmentCenter;
     label.textColor = NSColor.whiteColor;
     label.font = [NSFont systemFontOfSize:12 weight:NSFontWeightMedium];
+    NSShadow *textShadow = [NSShadow new];
+    textShadow.shadowColor = [NSColor colorWithWhite:0 alpha:0.70];
+    textShadow.shadowBlurRadius = 3;
+    textShadow.shadowOffset = NSMakeSize(0, -1);
+    label.shadow = textShadow;
     [glass addSubview:label];
     window.contentView = glass;
     [nookletHostWindow addChildWindow:window ordered:NSWindowAbove];
