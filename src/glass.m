@@ -17,6 +17,11 @@ static NSWindow *nookletProgressWindow;
 static CAShapeLayer *nookletProgressTrack;
 static CAShapeLayer *nookletProgressArc;
 static int nookletProgressStyle = -1;
+static NSWindow *booklandActivityWindow;
+static NSGlassEffectView *booklandActivityGlass;
+static NSTextField *booklandActivityLabel;
+static unsigned long long booklandActivityGeneration;
+static BOOL booklandActivityDismissing;
 static id booklandScrollMonitor;
 static double booklandScrollDeltaX;
 static double booklandScrollDeltaY;
@@ -586,4 +591,133 @@ void nooklet_progress_ring_set(int enabled, double x, double y, int usageStyle) 
         [CATransaction commit];
     }
     if (!nookletProgressWindow.isVisible) [nookletProgressWindow orderFront:nil];
+}
+
+// A short-lived, non-interactive activity capsule sits beside the camera.
+// Its entry and exit run entirely in Core Animation; there is no idle tick.
+static void booklandPrepareActivityWindow(void) {
+    if (booklandActivityWindow || !nookletHostWindow) return;
+    NSWindow *window = [[NSWindow alloc]
+        initWithContentRect:NSMakeRect(0, 0, 120, 30)
+                  styleMask:NSWindowStyleMaskBorderless
+                    backing:NSBackingStoreBuffered defer:NO];
+    window.opaque = NO;
+    window.backgroundColor = NSColor.clearColor;
+    window.hasShadow = YES;
+    window.ignoresMouseEvents = YES;
+    window.collectionBehavior = nookletHostWindow.collectionBehavior;
+    window.level = NSStatusWindowLevel;
+    NSGlassEffectView *glass = [[NSGlassEffectView alloc]
+        initWithFrame:NSMakeRect(0, 0, 120, 30)];
+    glass.wantsLayer = YES;
+    glass.style = NSGlassEffectViewStyleRegular;
+    glass.cornerRadius = 15;
+    glass.tintColor = [NSColor colorWithCalibratedRed:0.13 green:0.17
+                                                 blue:0.23 alpha:0.08];
+    NSTextField *label = [[NSTextField alloc] initWithFrame:NSMakeRect(12, 6, 96, 18)];
+    label.editable = NO;
+    label.selectable = NO;
+    label.bezeled = NO;
+    label.drawsBackground = NO;
+    label.lineBreakMode = NSLineBreakByTruncatingTail;
+    label.alignment = NSTextAlignmentCenter;
+    label.textColor = NSColor.whiteColor;
+    label.font = [NSFont systemFontOfSize:12 weight:NSFontWeightMedium];
+    [glass addSubview:label];
+    window.contentView = glass;
+    [nookletHostWindow addChildWindow:window ordered:NSWindowAbove];
+    booklandActivityWindow = window;
+    booklandActivityGlass = glass;
+    booklandActivityLabel = label;
+}
+
+void bookland_activity_bubble_hide(void) {
+    if (!booklandActivityWindow.isVisible || booklandActivityDismissing) return;
+    booklandActivityDismissing = YES;
+    unsigned long long generation = booklandActivityGeneration;
+    CALayer *layer = booklandActivityGlass.layer;
+    if (nooklet_reduce_motion()) {
+        [booklandActivityWindow orderOut:nil];
+        booklandActivityDismissing = NO;
+        return;
+    }
+    CALayer *presented = (CALayer *)layer.presentationLayer;
+    CABasicAnimation *fade = [CABasicAnimation animationWithKeyPath:@"opacity"];
+    fade.fromValue = @(presented ? presented.opacity : layer.opacity);
+    fade.toValue = @0;
+    fade.duration = 0.19;
+    fade.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseIn];
+    CABasicAnimation *slide = [CABasicAnimation
+        animationWithKeyPath:@"transform.translation.x"];
+    slide.fromValue = @(presented ? presented.transform.m41 : 0);
+    slide.toValue = @(-10);
+    slide.duration = fade.duration;
+    slide.timingFunction = fade.timingFunction;
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    layer.opacity = 0;
+    [layer addAnimation:fade forKey:@"booklandActivityFade"];
+    [layer addAnimation:slide forKey:@"booklandActivitySlide"];
+    [CATransaction commit];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.20 * NSEC_PER_SEC)),
+        dispatch_get_main_queue(), ^{
+            if (generation != booklandActivityGeneration) return;
+            [booklandActivityWindow orderOut:nil];
+            booklandActivityDismissing = NO;
+        });
+}
+
+void bookland_activity_bubble_show(const char *utf8, double closedWidth) {
+    if (!utf8 || !*utf8 || !nookletHostWindow) return;
+    NSString *message = [NSString stringWithUTF8String:utf8];
+    if (!message.length) return;
+    booklandPrepareActivityWindow();
+    if (!booklandActivityWindow) return;
+    ++booklandActivityGeneration;
+    booklandActivityDismissing = NO;
+    booklandActivityLabel.stringValue = message;
+    CGFloat labelWidth = [message sizeWithAttributes:@{
+        NSFontAttributeName: booklandActivityLabel.font
+    }].width;
+    CGFloat width = fmin(260, fmax(106, ceil(labelWidth) + 28));
+    NSRect frame = NSMakeRect(0, 0, width, 30);
+    booklandActivityGlass.frame = frame;
+    booklandActivityLabel.frame = NSMakeRect(12, 6, width - 24, 18);
+    NSScreen *screen = nookletHostWindow.screen ?: NSScreen.mainScreen;
+    if (!screen) return;
+    CGFloat x = NSMidX(screen.frame) + fmax(90, closedWidth * 0.5) + 12;
+    x = fmin(x, NSMaxX(screen.frame) - width - 8);
+    CGFloat top = NSMaxY(screen.frame) - fmax(32, screen.safeAreaInsets.top) - 8;
+    [booklandActivityWindow setFrame:NSMakeRect(x, top - 30, width, 30) display:NO];
+    CALayer *layer = booklandActivityGlass.layer;
+    [layer removeAllAnimations];
+    if (!booklandActivityWindow.isVisible) [booklandActivityWindow orderFront:nil];
+    if (nooklet_reduce_motion()) {
+        layer.opacity = 1;
+    } else {
+        CASpringAnimation *enter = [CASpringAnimation
+            animationWithKeyPath:@"transform.translation.x"];
+        enter.fromValue = @(-15);
+        enter.toValue = @0;
+        enter.mass = 1;
+        enter.stiffness = 140;
+        enter.damping = 18;
+        enter.initialVelocity = 0;
+        enter.duration = fmin(0.55, enter.settlingDuration);
+        CABasicAnimation *fade = [CABasicAnimation animationWithKeyPath:@"opacity"];
+        fade.fromValue = @0;
+        fade.toValue = @1;
+        fade.duration = 0.13;
+        [CATransaction begin];
+        [CATransaction setDisableActions:YES];
+        layer.opacity = 1;
+        [layer addAnimation:enter forKey:@"booklandActivityEnter"];
+        [layer addAnimation:fade forKey:@"booklandActivityFade"];
+        [CATransaction commit];
+    }
+    unsigned long long generation = booklandActivityGeneration;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.1 * NSEC_PER_SEC)),
+        dispatch_get_main_queue(), ^{
+            if (generation == booklandActivityGeneration) bookland_activity_bubble_hide();
+        });
 }

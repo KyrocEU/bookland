@@ -57,6 +57,8 @@ unsafe extern "C" {
     fn nooklet_reduce_motion() -> i32;
     fn nooklet_physical_notch(width: *mut f64, height: *mut f64) -> i32;
     fn nooklet_progress_ring_set(enabled: i32, x: f64, y: f64, usage_style: i32);
+    fn bookland_activity_bubble_show(message: *const std::ffi::c_char, closed_width: f64);
+    fn bookland_activity_bubble_hide();
     fn bookland_volume_hud_set(enabled: i32);
     fn bookland_system_volume_get() -> f32;
     fn bookland_system_volume_set(value: f32) -> i32;
@@ -734,6 +736,8 @@ struct DeskApp {
     hover_blocked_until_exit: bool,
     native_ring_center: Option<egui::Pos2>,
     native_usage_ring_center: Option<egui::Pos2>,
+    pending_activity_bubble: Option<String>,
+    activity_bubble_visible: bool,
     native_morph_shell: Option<(egui::Rect, f32, f32, f32)>,
     island_gesture: IslandGesture,
     last_haptic_expanded: bool,
@@ -2295,6 +2299,8 @@ impl DeskApp {
             hover_blocked_until_exit: false,
             native_ring_center: None,
             native_usage_ring_center: None,
+            pending_activity_bubble: None,
+            activity_bubble_visible: false,
             native_morph_shell: None,
             island_gesture: IslandGesture::default(),
             last_haptic_expanded: expanded,
@@ -2495,6 +2501,23 @@ impl DeskApp {
                 self.native_installed = nooklet_install_glass(self.native_view as *mut _) != 0;
             }
             if self.native_installed {
+                if (self.expanded || self.prefs.style != "Glass"
+                    || self.screenshot.is_some() || self.preview_mode)
+                    && self.activity_bubble_visible {
+                    bookland_activity_bubble_hide();
+                    self.activity_bubble_visible = false;
+                }
+                if let Some(message) = self.pending_activity_bubble.take() {
+                    if !self.expanded && self.prefs.style == "Glass"
+                        && self.screenshot.is_none() && !self.preview_mode {
+                        if let Ok(message) = CString::new(message.chars().take(80)
+                            .collect::<String>()) {
+                            bookland_activity_bubble_show(message.as_ptr(),
+                                f64::from(self.closed_dimensions().0));
+                            self.activity_bubble_visible = true;
+                        }
+                    }
+                }
                 if !self.airpods_events_attempted && !self.preview_mode
                     && self.screenshot.is_none() {
                     self.airpods_events_enabled = bookland_airpods_watch_set(1) != 0;
@@ -2803,12 +2826,16 @@ impl DeskApp {
                             pocket::Action::Zip => "Created ZIP in Pocket",
                         }.into(),
                     };
-                    self.pocket_activity = Some((format!("{short} ready"), true, Instant::now()));
+                    let cue = format!("{short} ready");
+                    self.pocket_activity = Some((cue.clone(), true, Instant::now()));
+                    self.pending_activity_bubble = Some(cue);
                     self.notify(self.pocket_status.clone());
                 }
                 Err(error) => {
                     self.pocket_status = format!("Pocket: {error}");
-                    self.pocket_activity = Some(("File action failed".into(), false, Instant::now()));
+                    let cue = "File action failed".to_owned();
+                    self.pocket_activity = Some((cue.clone(), false, Instant::now()));
+                    self.pending_activity_bubble = Some(cue);
                     self.notify(self.pocket_status.clone());
                 }
             }
@@ -3061,6 +3088,7 @@ impl DeskApp {
                             source: done.source.clone(),
                             path: done.path.clone(),
                         });
+                        self.pending_activity_bubble = Some(format!("{} finished", done.source));
                     }
                 }
                 if self.agent_completion.as_ref().is_some_and(|done|
@@ -3102,6 +3130,7 @@ impl DeskApp {
                         self.last_download_sample = Instant::now();
                         if let Some(name) = completed.first() {
                             self.notify(format!("Download finished: {name}"));
+                            self.pending_activity_bubble = Some("Download ready".into());
                         }
                     }
                     Err(error) => {
@@ -3131,7 +3160,8 @@ impl DeskApp {
             if let Ok(status) = receiver.try_recv() {
                 if self.airpods_baseline_seen {
                     if let Some(label) = airpods::connection_activity(&self.airpods, &status) {
-                        self.airpods_activity = Some((label, Instant::now()));
+                        self.airpods_activity = Some((label.clone(), Instant::now()));
+                        self.pending_activity_bubble = Some(label);
                     }
                 }
                 self.airpods_baseline_seen = true;
