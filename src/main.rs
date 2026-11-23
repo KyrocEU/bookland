@@ -2554,7 +2554,7 @@ impl DeskApp {
                 }
                 if self.animation_clock_enabled {
                     nooklet_animation_clock_rate(if self.native_morph_animating
-                        && self.transition < 0.82 { 30 } else { 60 });
+                        && self.transition < 0.82 { 30 } else { 120 });
                 }
             }
         }

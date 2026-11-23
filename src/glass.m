@@ -78,9 +78,14 @@ int nooklet_animation_clock_set(int enabled, void *context, void (*wake)(void *)
 void nooklet_animation_clock_rate(int fps) {
     if (!booklandAnimationLink) return;
     static int currentRate = 60;
-    int rate = fps <= 30 ? 30 : 60;
+    NSScreen *screen = nookletHostWindow.screen ?: NSScreen.mainScreen;
+    int maximum = screen ? (int)screen.maximumFramesPerSecond : 60;
+    int rate = fps <= 30 ? 30 : (fps >= 120 && maximum >= 120 ? 120 : 60);
     if (rate == currentRate) return;
-    booklandAnimationLink.preferredFrameRateRange = CAFrameRateRangeMake(rate, rate, rate);
+    // Allow the system to use 60 Hz on ProMotion displays when its power or
+    // thermal policy prefers it. The link is paused once the morph settles.
+    booklandAnimationLink.preferredFrameRateRange = CAFrameRateRangeMake(
+        rate == 120 ? 60 : rate, rate, rate);
     currentRate = rate;
 }
 
