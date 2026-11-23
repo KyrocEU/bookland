@@ -4682,7 +4682,7 @@ impl DeskApp {
             #[cfg(not(target_os = "macos"))]
             let request_pending = false;
             ui.horizontal(|ui| {
-                label(ui, "Google Calendar syncs through macOS Calendar.", 12.0, MUTED);
+                label(ui, "Connect Bookland to calendars already on this Mac.", 12.0, MUTED);
                 if request_pending {
                     label(ui, "Waiting for macOS permission…", 12.0, MUTED);
                 } else if small_button(ui, "Connect Calendar").clicked() {
@@ -4851,9 +4851,16 @@ impl DeskApp {
                         ui.add_space(8.0);
                     }
                 }
-                2 => label(ui, "Calendar access is off. Enable it in macOS Privacy & Security settings.", 12.0, MUTED),
+                2 => {
+                    label(ui, "Calendar access is off for Bookland.", 12.0, MUTED);
+                    if small_button(ui, "Open Calendar Permissions").clicked() {
+                        let _ = Command::new("open")
+                            .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")
+                            .spawn();
+                    }
+                }
                 _ => {
-                    label(ui, "To use Google Calendar, add your Google account in Calendar → Add Account, then connect Bookland.", 12.0, MUTED);
+                    label(ui, "Connect Calendar above to show events from your Mac calendars, including Google calendars already added to macOS.", 12.0, MUTED);
                 }
             }
         });
