@@ -2670,6 +2670,7 @@ impl DeskApp {
             pocket::Action::Keep => "Keeping a copy…",
             pocket::Action::Png | pocket::Action::Jpeg |
             pocket::Action::Heic | pocket::Action::Tiff => "Converting image…",
+            pocket::Action::Aiff | pocket::Action::Alac => "Converting audio…",
             pocket::Action::Zip => "Creating ZIP…",
         }.into();
     }
@@ -2697,6 +2698,8 @@ impl DeskApp {
                         pocket::Action::Jpeg => "Converted to JPEG in Pocket",
                         pocket::Action::Heic => "Converted to HEIC in Pocket",
                         pocket::Action::Tiff => "Converted to TIFF in Pocket",
+                        pocket::Action::Aiff => "Converted to AIFF in Pocket",
+                        pocket::Action::Alac => "Converted to ALAC in Pocket",
                         pocket::Action::Zip => "Created ZIP in Pocket",
                     }.into();
                     self.notify(self.pocket_status.clone());
@@ -4857,7 +4860,7 @@ impl DeskApp {
         ui.add_space(13.0);
         card().show(ui, |ui| {
             label(ui, "Pocket", 18.0, TEXT);
-            label(ui, "Drop a file on the island, or choose one here. Keep a copy, create a ZIP, convert an image, or share with AirDrop.", 12.0, MUTED);
+            label(ui, "Drop a file on the island, or choose one here. Keep a copy, create a ZIP, convert media, or share with AirDrop.", 12.0, MUTED);
             ui.horizontal(|ui| {
                 if ui.button("Add file or folder").clicked() {
                     #[cfg(target_os = "macos")]
@@ -4914,7 +4917,9 @@ impl DeskApp {
                             for (label, action) in [("PNG", pocket::Action::Png),
                                 ("JPEG", pocket::Action::Jpeg),
                                 ("HEIC", pocket::Action::Heic),
-                                ("TIFF", pocket::Action::Tiff)] {
+                                ("TIFF", pocket::Action::Tiff),
+                                ("AIFF", pocket::Action::Aiff),
+                                ("ALAC (.m4a)", pocket::Action::Alac)] {
                                 if pocket::can_convert_to(&path, action) &&
                                     ui.add_enabled(self.pocket_job.is_none(),
                                         egui::Button::new(label)).clicked() {
@@ -4992,7 +4997,9 @@ impl DeskApp {
                                         for (label, action) in [("PNG", pocket::Action::Png),
                                             ("JPEG", pocket::Action::Jpeg),
                                             ("HEIC", pocket::Action::Heic),
-                                            ("TIFF", pocket::Action::Tiff)] {
+                                            ("TIFF", pocket::Action::Tiff),
+                                            ("AIFF", pocket::Action::Aiff),
+                                            ("ALAC (.m4a)", pocket::Action::Alac)] {
                                             if pocket::can_convert_to(&path, action) &&
                                                 ui.add_enabled(self.pocket_job.is_none(),
                                                     egui::Button::new(label)).clicked() {

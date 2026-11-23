@@ -1,7 +1,7 @@
 use std::{fs, path::{Path, PathBuf}, process::Command};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Action { Keep, Png, Jpeg, Heic, Tiff, Zip }
+pub enum Action { Keep, Png, Jpeg, Heic, Tiff, Aiff, Alac, Zip }
 
 pub fn is_kept(source: &Path, root: &Path) -> bool {
     source.parent().and_then(|parent| parent.canonicalize().ok())
@@ -12,19 +12,28 @@ pub fn can_convert(source: &Path) -> bool {
     source.is_file() && source.extension().and_then(|extension| extension.to_str())
         .is_some_and(|extension| matches!(extension.to_ascii_lowercase().as_str(),
             "png" | "jpg" | "jpeg" | "heic" | "heif" | "tif" | "tiff" |
-            "webp" | "bmp" | "gif" | "avif"))
+            "webp" | "bmp" | "gif" | "avif" | "wav" | "aif" | "aiff" |
+            "m4a" | "mp3" | "caf" | "flac"))
 }
 
 pub fn can_convert_to(source: &Path, action: Action) -> bool {
-    if !can_convert(source) || !matches!(action,
-        Action::Png | Action::Jpeg | Action::Heic | Action::Tiff) { return false; }
+    if !can_convert(source) { return false; }
     let extension = source.extension().and_then(|value| value.to_str())
         .unwrap_or_default().to_ascii_lowercase();
-    !matches!((action, extension.as_str()),
-        (Action::Png, "png") |
-        (Action::Jpeg, "jpg" | "jpeg") |
-        (Action::Heic, "heic" | "heif") |
-        (Action::Tiff, "tif" | "tiff"))
+    let source_is_audio = matches!(extension.as_str(),
+        "wav" | "aif" | "aiff" | "m4a" | "mp3" | "caf" | "flac");
+    match action {
+        Action::Aiff => source_is_audio && !matches!(extension.as_str(), "aif" | "aiff"),
+        Action::Alac => source_is_audio,
+        Action::Png | Action::Jpeg | Action::Heic | Action::Tiff => {
+            !source_is_audio && !matches!((action, extension.as_str()),
+                (Action::Png, "png") |
+                (Action::Jpeg, "jpg" | "jpeg") |
+                (Action::Heic, "heic" | "heif") |
+                (Action::Tiff, "tif" | "tiff"))
+        }
+        Action::Keep | Action::Zip => false,
+    }
 }
 
 fn destination(root: &Path, source: &Path, extension: Option<&str>) -> Result<PathBuf, String> {
@@ -69,7 +78,8 @@ pub fn execute(action: Action, source: &Path, root: &Path) -> Result<PathBuf, St
         let extension = match action {
             Action::Keep => None, Action::Png => Some("png"),
             Action::Jpeg => Some("jpg"), Action::Heic => Some("heic"),
-            Action::Tiff => Some("tiff"), Action::Zip => unreachable!(),
+            Action::Tiff => Some("tiff"), Action::Aiff => Some("aiff"),
+            Action::Alac => Some("m4a"), Action::Zip => unreachable!(),
         };
         destination(root, source, extension)?
     };
@@ -93,6 +103,17 @@ pub fn execute(action: Action, source: &Path, root: &Path) -> Result<PathBuf, St
             };
             Command::new("/usr/bin/sips").args(["-s", "format", format])
                 .arg(source).arg("--out").arg(&output).output()
+        }
+        Action::Aiff | Action::Alac => {
+            if !can_convert_to(source, action) {
+                return Err("This audio file cannot be converted to that format".into());
+            }
+            let (file, data) = if action == Action::Aiff {
+                ("AIFF", "BEI16")
+            } else { ("m4af", "alac") };
+            Command::new("/usr/bin/afconvert")
+                .args(["-f", file, "-d", data])
+                .arg(source).arg(&output).output()
         }
     }.map_err(|error| error.to_string())?;
     if !result.status.success() || !output.exists() {
@@ -149,6 +170,39 @@ mod tests {
             assert!(result.status.success());
             assert!(String::from_utf8_lossy(&result.stdout).contains(extension));
         }
+    }
+
+    #[test]
+    fn audio_conversion_writes_aiff_and_alac() {
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("sample.wav");
+        let pocket = temp.path().join("Pocket");
+        let samples = vec![0_u8; 8_820];
+        let mut wav = Vec::new();
+        wav.extend_from_slice(b"RIFF");
+        wav.extend_from_slice(&(36 + samples.len() as u32).to_le_bytes());
+        wav.extend_from_slice(b"WAVEfmt ");
+        wav.extend_from_slice(&16_u32.to_le_bytes());
+        wav.extend_from_slice(&1_u16.to_le_bytes());
+        wav.extend_from_slice(&1_u16.to_le_bytes());
+        wav.extend_from_slice(&44_100_u32.to_le_bytes());
+        wav.extend_from_slice(&88_200_u32.to_le_bytes());
+        wav.extend_from_slice(&2_u16.to_le_bytes());
+        wav.extend_from_slice(&16_u16.to_le_bytes());
+        wav.extend_from_slice(b"data");
+        wav.extend_from_slice(&(samples.len() as u32).to_le_bytes());
+        wav.extend_from_slice(&samples);
+        fs::write(&source, wav).unwrap();
+        for (action, extension, codec) in [(Action::Aiff, "aiff", "AIFF"),
+            (Action::Alac, "m4a", "alac")] {
+            assert!(can_convert_to(&source, action));
+            let output = execute(action, &source, &pocket).unwrap();
+            assert_eq!(output.extension().and_then(|value| value.to_str()), Some(extension));
+            let info = Command::new("/usr/bin/afinfo").arg(&output).output().unwrap();
+            assert!(info.status.success());
+            assert!(String::from_utf8_lossy(&info.stdout).contains(codec));
+        }
+        assert!(!can_convert_to(&source, Action::Heic));
     }
 
     #[test]
