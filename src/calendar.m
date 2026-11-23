@@ -24,6 +24,12 @@ void nooklet_calendar_refresh(void) {
     NSDate *end = [NSDate dateWithTimeIntervalSinceNow:86400 * 45];
     NSPredicate *predicate = [store predicateForEventsWithStartDate:start endDate:end calendars:nil];
     NSArray<EKEvent *> *events = [store eventsMatchingPredicate:predicate];
+    NSDateFormatter *timedFormat = [NSDateFormatter new];
+    timedFormat.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+    timedFormat.dateFormat = @"EEE MMM d '·' HH:mm";
+    NSDateFormatter *allDayFormat = [NSDateFormatter new];
+    allDayFormat.locale = timedFormat.locale;
+    allDayFormat.dateFormat = @"EEE MMM d '·' 'All day'";
     NSMutableArray *rows = [NSMutableArray array];
     for (EKEvent *event in events) {
         if (rows.count >= 80) break;
@@ -32,7 +38,9 @@ void nooklet_calendar_refresh(void) {
             @"start": @([event.startDate timeIntervalSince1970]),
             @"end": @([event.endDate timeIntervalSince1970]),
             @"calendar": event.calendar.title ?: @"Calendar",
-            @"all_day": @(event.isAllDay)
+            @"all_day": @(event.isAllDay),
+            @"display_time": [(event.isAllDay ? allDayFormat : timedFormat)
+                stringFromDate:event.startDate] ?: @""
         }];
     }
     NSData *json = [NSJSONSerialization dataWithJSONObject:rows options:0 error:nil];

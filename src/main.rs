@@ -135,12 +135,14 @@ extern "C" fn bookland_pocket_shake_sample(x: f64, dragging: bool) -> bool {
 #[derive(Clone, Deserialize)]
 struct CalendarEvent {
     title: String,
+    #[allow(dead_code)]
     start: f64,
     #[allow(dead_code)]
     end: f64,
     calendar: String,
+    #[allow(dead_code)]
     all_day: bool,
-    #[serde(skip)]
+    #[serde(default)]
     display_time: String,
 }
 
@@ -2948,10 +2950,6 @@ impl DeskApp {
                     let mut buffer = vec![0_u8; 65_536];
                     let size = nooklet_calendar_copy(buffer.as_mut_ptr().cast(), buffer.len());
                     self.calendar_events = serde_json::from_slice(&buffer[..size]).unwrap_or_default();
-                    for event in &mut self.calendar_events {
-                        let format = if event.all_day { "+%a %b %e · All day" } else { "+%a %b %e · %H:%M" };
-                        event.display_time = run_output("date", &["-r", &(event.start as i64).to_string(), format]).unwrap_or_default();
-                    }
                 }
             }
             self.last_calendar_poll = Instant::now();
