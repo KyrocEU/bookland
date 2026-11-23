@@ -415,8 +415,15 @@ void nooklet_morph_shell_set(int enabled, double x, double y, double width,
         return;
     }
     if (nookletMorphAnimating) {
-        nookletMorphView.hidden = NO;
-        return;
+        // Once Core Animation removes the completed keyframes, resume
+        // following the live island geometry. Otherwise a workspace resize
+        // can leave the shell at the dimensions of its last hover morph.
+        if ([nookletMorphLayer animationForKey:@"booklandMorphPath"] ||
+            [nookletMorphLayer animationForKey:@"booklandMorphOpacity"]) {
+            nookletMorphView.hidden = NO;
+            return;
+        }
+        nookletMorphAnimating = NO;
     }
     if (width <= 0 || height <= 0 || opacity <= 0) {
         nookletMorphView.hidden = YES;
