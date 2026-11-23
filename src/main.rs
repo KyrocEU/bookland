@@ -70,7 +70,8 @@ unsafe extern "C" {
     fn bookland_audio_spectrum_set(enabled: i32);
     fn bookland_audio_spectrum_copy(levels: *mut f32, count: usize) -> i32;
     #[cfg(test)]
-    fn bookland_audio_spectrum_test_tone(frequency: f32, levels: *mut f32, count: usize);
+    fn bookland_audio_spectrum_test_tone(frequency: f32, channel_mode: i32,
+        levels: *mut f32, count: usize);
     fn bookland_airpods_watch_set(enabled: i32) -> i32;
     fn bookland_airpods_events_take() -> i32;
     fn bookland_airpods_watch_status() -> i32;
@@ -1406,14 +1407,16 @@ mod system_media_tests {
 }
 #[cfg(all(test, target_os = "macos"))]
 mod audio_spectrum_tests {
+    static TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
     #[test]
     fn real_tone_moves_energy_to_higher_frequency_bands() {
+        let _guard = TEST_LOCK.lock().unwrap();
         let mut low = [0.0_f32; 16];
         let mut high = [0.0_f32; 16];
         unsafe {
-            super::bookland_audio_spectrum_test_tone(220.0,
+            super::bookland_audio_spectrum_test_tone(220.0, 0,
                 low.as_mut_ptr(), low.len());
-            super::bookland_audio_spectrum_test_tone(2200.0,
+            super::bookland_audio_spectrum_test_tone(2200.0, 0,
                 high.as_mut_ptr(), high.len());
         }
         let peak = |levels: &[f32; 16]| levels.iter().enumerate()
@@ -1425,6 +1428,29 @@ mod audio_spectrum_tests {
         assert!(high[peak(&high)] > 0.2);
         assert!(peak(&high) > peak(&low) + 3,
             "frequency bands should distinguish a 220 Hz tone from 2.2 kHz");
+    }
+    #[test]
+    fn stereo_phase_and_planar_layout_keep_real_audio_visible() {
+        let _guard = TEST_LOCK.lock().unwrap();
+        let mut interleaved = [0.0_f32; 16];
+        let mut antiphase = [0.0_f32; 16];
+        let mut planar = [0.0_f32; 16];
+        unsafe {
+            super::bookland_audio_spectrum_test_tone(440.0, 0,
+                interleaved.as_mut_ptr(), interleaved.len());
+            super::bookland_audio_spectrum_test_tone(440.0, 1,
+                antiphase.as_mut_ptr(), antiphase.len());
+            super::bookland_audio_spectrum_test_tone(440.0, 2,
+                planar.as_mut_ptr(), planar.len());
+        }
+        let peak = |levels: &[f32; 16]| levels.iter().copied()
+            .fold(0.0_f32, f32::max);
+        assert!(peak(&antiphase) > 0.2,
+            "opposite-phase stereo channels must not cancel the spectrum");
+        assert!(peak(&planar) > 0.2,
+            "Core Audio's non-interleaved stereo layout must remain visible");
+        assert!((peak(&interleaved) - peak(&antiphase)).abs() < 0.04);
+        assert!((peak(&interleaved) - peak(&planar)).abs() < 0.04);
     }
 }
 fn read_media(source: &str) -> MediaSnapshot {
