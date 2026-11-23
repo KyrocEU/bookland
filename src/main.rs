@@ -4977,6 +4977,7 @@ impl DeskApp {
                     if ui.button("Forget").clicked() {
                         self.files.retain(|item| item != &path);
                         if self.files.is_empty() { self.pocket_status.clear(); }
+                        self.pocket_activity = None;
                         self.save_data();
                     }
                 });
@@ -5061,6 +5062,7 @@ impl DeskApp {
                                 if ui.button("Forget").clicked() {
                                     self.files.retain(|item| item != &path);
                                     if self.files.is_empty() { self.pocket_status.clear(); }
+                                    self.pocket_activity = None;
                                     self.save_data();
                                 }
                             });
