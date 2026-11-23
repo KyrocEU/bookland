@@ -59,7 +59,8 @@ unsafe extern "C" {
     fn nooklet_progress_ring_set(enabled: i32, x: f64, y: f64, usage_style: i32);
     fn bookland_activity_bubble_show(message: *const std::ffi::c_char, closed_width: f64);
     fn bookland_activity_bubble_hide();
-    fn bookland_conversion_card_show(path: *const std::ffi::c_char);
+    fn bookland_result_card_show(path: *const std::ffi::c_char,
+        subtitle: *const std::ffi::c_char, seconds: f64);
     fn bookland_conversion_card_hide();
     fn bookland_volume_hud_set(enabled: i32);
     fn bookland_system_volume_get() -> f32;
@@ -585,6 +586,7 @@ struct Preferences {
     prompter_text_size: f32,
     weather_city: String,
     downloads_folder: String,
+    watch_downloads: bool,
     global_shortcut: bool,
     clipboard_shortcut: bool,
     auto_close: bool,
@@ -659,6 +661,7 @@ impl Default for Preferences {
             prompter_text_size: 25.0,
             weather_city: String::new(),
             downloads_folder: String::new(),
+            watch_downloads: false,
             global_shortcut: false,
             clipboard_shortcut: false,
             auto_close: true,
@@ -708,6 +711,19 @@ fn detects_the_current_mac_display_for_island_targeting() {
     assert!(displays.iter().any(|display| display.main));
 }
 
+struct FileResultCard {
+    path: PathBuf,
+    subtitle: String,
+    lifetime: Duration,
+    ready_at: Instant,
+}
+
+impl FileResultCard {
+    fn new(path: PathBuf, subtitle: String, lifetime: Duration) -> Self {
+        Self { path, subtitle, lifetime, ready_at: Instant::now() }
+    }
+}
+
 struct DeskApp {
     expanded: bool,
     workspace: Workspace,
@@ -740,8 +756,8 @@ struct DeskApp {
     native_usage_ring_center: Option<egui::Pos2>,
     pending_activity_bubble: Option<String>,
     activity_bubble_visible: bool,
-    pending_conversion_card: Option<(PathBuf, Instant)>,
-    conversion_card_visible: bool,
+    pending_result_card: Option<FileResultCard>,
+    result_card_visible: bool,
     native_morph_shell: Option<(egui::Rect, f32, f32, f32)>,
     island_gesture: IslandGesture,
     last_haptic_expanded: bool,
@@ -838,6 +854,7 @@ struct DeskApp {
     video_progress: VideoProgress,
     video_rx: Option<std::sync::mpsc::Receiver<VideoEvent>>,
     video_pid: Option<u32>,
+    video_saved_path: Option<PathBuf>,
     video_status: String,
     video_stopping: bool,
     terminal_draft: String,
@@ -2305,8 +2322,8 @@ impl DeskApp {
             native_usage_ring_center: None,
             pending_activity_bubble: None,
             activity_bubble_visible: false,
-            pending_conversion_card: None,
-            conversion_card_visible: false,
+            pending_result_card: None,
+            result_card_visible: false,
             native_morph_shell: None,
             island_gesture: IslandGesture::default(),
             last_haptic_expanded: expanded,
@@ -2405,6 +2422,7 @@ impl DeskApp {
             video_progress: VideoProgress::default(),
             video_rx: None,
             video_pid: None,
+            video_saved_path: None,
             video_status: String::new(),
             video_stopping: false,
             terminal_draft: String::new(),
@@ -2515,9 +2533,9 @@ impl DeskApp {
                 }
                 if (self.expanded || self.prefs.style != "Glass"
                     || self.screenshot.is_some() || self.preview_mode)
-                    && self.conversion_card_visible {
+                    && self.result_card_visible {
                     bookland_conversion_card_hide();
-                    self.conversion_card_visible = false;
+                    self.result_card_visible = false;
                 }
                 if let Some(message) = self.pending_activity_bubble.take() {
                     if !self.expanded && self.prefs.style == "Glass"
@@ -2530,16 +2548,19 @@ impl DeskApp {
                         }
                     }
                 }
-                if self.pending_conversion_card.as_ref().is_some_and(|(_, at)|
-                    at.elapsed() >= Duration::from_secs(6)) {
-                    self.pending_conversion_card = None;
+                if self.pending_result_card.as_ref().is_some_and(|card|
+                    card.ready_at.elapsed() >= card.lifetime) {
+                    self.pending_result_card = None;
                 }
                 if !self.expanded && self.prefs.style == "Glass"
                     && self.screenshot.is_none() && !self.preview_mode {
-                    if let Some((path, _)) = self.pending_conversion_card.take() {
-                        if let Ok(path) = CString::new(path.to_string_lossy().as_bytes()) {
-                            bookland_conversion_card_show(path.as_ptr());
-                            self.conversion_card_visible = true;
+                    if let Some(card) = self.pending_result_card.take() {
+                        if let (Ok(path), Ok(subtitle)) = (
+                            CString::new(card.path.to_string_lossy().as_bytes()),
+                            CString::new(card.subtitle)) {
+                            bookland_result_card_show(path.as_ptr(), subtitle.as_ptr(),
+                                card.lifetime.as_secs_f64());
+                            self.result_card_visible = true;
                         }
                     }
                 }
@@ -2859,7 +2880,8 @@ impl DeskApp {
                     let cue = format!("{short} ready");
                     self.pocket_activity = Some((cue.clone(), true, Instant::now()));
                     if is_conversion {
-                        self.pending_conversion_card = Some((path, Instant::now()));
+                        self.pending_result_card = Some(FileResultCard::new(path,
+                            "Converted in Pocket".into(), Duration::from_secs(6)));
                     } else {
                         self.pending_activity_bubble = Some(cue);
                     }
@@ -2898,6 +2920,7 @@ impl DeskApp {
         self.video_progress = VideoProgress::default();
         self.video_status = "Starting download…".into();
         self.video_stopping = false;
+        self.video_saved_path = None;
         std::thread::spawn(move || video::download(&tool, &url, &folder, tx));
     }
     fn send_codex(&mut self) {
@@ -3087,18 +3110,31 @@ impl DeskApp {
                 }
                 VideoEvent::Saved(path) => {
                     self.files.retain(|item| item != &path);
-                    self.files.insert(0, path);
+                    self.files.insert(0, path.clone());
                     self.files.truncate(8);
+                    self.video_saved_path = Some(path);
                     self.save_data();
                 }
                 VideoEvent::Finished(result) => {
                     self.video_rx = None;
                     self.video_pid = None;
+                    let succeeded = result.is_ok();
                     self.video_status = match result {
                         Ok(()) => "Saved to Tray".into(),
                         Err(_) if self.video_stopping => "Download cancelled".into(),
                         Err(error) => format!("Download failed: {error}"),
                     };
+                    if succeeded {
+                        if let Some(path) = self.video_saved_path.take() {
+                            let size = path.metadata().map(|meta| meta.len()).unwrap_or(0);
+                            let subtitle = format!("YouTube · {}",
+                                downloads::format_bytes(size));
+                            self.pending_result_card = Some(FileResultCard::new(path,
+                                subtitle, Duration::from_secs(5)));
+                        }
+                    } else {
+                        self.video_saved_path = None;
+                    }
                     let message = self.video_status.clone();
                     self.notify(message);
                     self.video_stopping = false;
@@ -3164,7 +3200,22 @@ impl DeskApp {
                         self.last_download_sample = Instant::now();
                         if let Some(name) = completed.first() {
                             self.notify(format!("Download finished: {name}"));
-                            self.pending_activity_bubble = Some("Download ready".into());
+                            if self.prefs.watch_downloads {
+                                let result = self.downloads.iter().find(|item|
+                                    !item.active && item.path.file_name().is_some_and(|file|
+                                        file.to_string_lossy().as_ref() == name.as_str()))
+                                    .map(|item| (item.path.clone(), item.bytes));
+                                if let Some((path, bytes)) = result {
+                                    let subtitle = format!("Download · {}",
+                                        downloads::format_bytes(bytes));
+                                    self.pending_result_card = Some(FileResultCard::new(path,
+                                        subtitle, Duration::from_secs(3)));
+                                } else {
+                                    self.pending_activity_bubble = Some("Download ready".into());
+                                }
+                            } else {
+                                self.pending_activity_bubble = Some("Download ready".into());
+                            }
                         }
                     }
                     Err(error) => {
@@ -3235,7 +3286,8 @@ impl DeskApp {
                 self.terminal_rx = None;
             }
         }
-        if self.prefs.widgets.contains(&Widget::Downloads) && self.downloads_rx.is_none() {
+        if (self.prefs.widgets.contains(&Widget::Downloads)
+            || self.prefs.watch_downloads) && self.downloads_rx.is_none() {
             let interval = if self.downloads.iter().any(|entry| entry.active) { 2 } else { 10 };
             if self.last_download_poll.elapsed() >= Duration::from_secs(interval) {
                 if let Some(folder) = downloads_root(&self.prefs.downloads_folder) {
@@ -8234,6 +8286,11 @@ impl DeskApp {
             "Downloads" => {
                 card().show(ui, |ui| {
                     label(ui, "Watch active and recent files in a folder.", 12.0, MUTED);
+                    if ui.checkbox(&mut self.prefs.watch_downloads,
+                        "Show a result card when a download finishes").changed() {
+                        self.downloads.clear();
+                        self.last_download_poll = Instant::now() - Duration::from_secs(20);
+                    }
                     let folder = downloads_root(&self.prefs.downloads_folder)
                         .unwrap_or_else(|| PathBuf::from("Downloads"));
                     label(ui, &folder.to_string_lossy(), 11.0, MUTED);
@@ -8244,6 +8301,7 @@ impl DeskApp {
                             let length = unsafe { bookland_choose_folder(buffer.as_mut_ptr().cast(), buffer.len()) };
                             if length > 0 {
                                 self.prefs.downloads_folder = String::from_utf8_lossy(&buffer[..length]).into_owned();
+                                self.prefs.watch_downloads = true;
                                 self.downloads.clear();
                                 self.downloads_error = None;
                                 self.last_download_poll = Instant::now() - Duration::from_secs(20);
@@ -8251,6 +8309,7 @@ impl DeskApp {
                         }
                         if small_button(ui, "Use Downloads").clicked() {
                             self.prefs.downloads_folder.clear();
+                            self.prefs.watch_downloads = true;
                             self.downloads.clear();
                             self.downloads_error = None;
                             self.last_download_poll = Instant::now() - Duration::from_secs(20);

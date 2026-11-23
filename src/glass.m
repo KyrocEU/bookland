@@ -2,6 +2,7 @@
 #import <QuartzCore/QuartzCore.h>
 #import <QuickLookThumbnailing/QuickLookThumbnailing.h>
 #import <os/log.h>
+#include <math.h>
 #include <string.h>
 
 // Keep winit's content view untouched: it owns keyboard and IME state.
@@ -27,6 +28,7 @@ static NSWindow *booklandConversionWindow;
 static NSGlassEffectView *booklandConversionGlass;
 static NSImageView *booklandConversionPreview;
 static NSTextField *booklandConversionName;
+static NSTextField *booklandConversionStatus;
 static NSURL *booklandConversionURL;
 static QLThumbnailGenerationRequest *booklandConversionRequest;
 static unsigned long long booklandConversionGeneration;
@@ -829,6 +831,7 @@ static void booklandPrepareConversionCard(void) {
     booklandConversionGlass = glass;
     booklandConversionPreview = preview;
     booklandConversionName = name;
+    booklandConversionStatus = status;
 }
 
 void bookland_conversion_card_hide(void) {
@@ -872,7 +875,8 @@ void bookland_conversion_card_hide(void) {
         });
 }
 
-void bookland_conversion_card_show(const char *utf8Path) {
+void bookland_result_card_show(const char *utf8Path,
+                               const char *utf8Subtitle, double seconds) {
     if (!utf8Path || !*utf8Path || !nookletHostWindow) return;
     NSString *path = [NSString stringWithUTF8String:utf8Path];
     if (!path.length || ![NSFileManager.defaultManager fileExistsAtPath:path]) return;
@@ -884,6 +888,8 @@ void bookland_conversion_card_show(const char *utf8Path) {
     NSURL *url = [NSURL fileURLWithPath:path];
     booklandConversionURL = url;
     booklandConversionName.stringValue = url.lastPathComponent ?: @"Converted file";
+    NSString *subtitle = utf8Subtitle ? [NSString stringWithUTF8String:utf8Subtitle] : nil;
+    booklandConversionStatus.stringValue = subtitle.length ? subtitle : @"File ready";
     booklandConversionPreview.image = [NSWorkspace.sharedWorkspace iconForFile:path];
     if (booklandConversionRequest) {
         [QLThumbnailGenerator.sharedGenerator cancelRequest:booklandConversionRequest];
@@ -934,7 +940,8 @@ void bookland_conversion_card_show(const char *utf8Path) {
                 booklandConversionRequest = nil;
             });
         }];
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(6 * NSEC_PER_SEC)),
+    double lifetime = isfinite(seconds) ? fmax(1, fmin(seconds, 10)) : 3;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(lifetime * NSEC_PER_SEC)),
         dispatch_get_main_queue(), ^{
             if (generation == booklandConversionGeneration)
                 bookland_conversion_card_hide();
