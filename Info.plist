@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key><string>en</string>
+  <key>CFBundleDisplayName</key><string>Bookland</string>
+  <key>CFBundleExecutable</key><string>bookland</string>
+  <key>CFBundleIdentifier</key><string>local.bookland.app</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>CFBundleName</key><string>Bookland</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>0.1.0</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>LSMinimumSystemVersion</key><string>26.0</string>
+  <key>LSUIElement</key><true/>
+  <key>NSAppleEventsUsageDescription</key><string>Bookland controls playback in Apple Music or Spotify and saves a note to Apple Notes when you request those actions.</string>
+  <key>NSCalendarsFullAccessUsageDescription</key><string>Bookland shows and creates calendar events when you connect Calendar.</string>
+  <key>NSMicrophoneUsageDescription</key><string>Bookland listens to your speech only while Voice Prompter is running so it can follow your script.</string>
+  <key>NSCameraUsageDescription</key><string>Bookland uses the camera only while you open the Mirror widget.</string>
+  <key>NSSpeechRecognitionUsageDescription</key><string>Bookland recognizes your speech while Voice Prompter is running to follow your script. On-device recognition is the default.</string>
+</dict>
+</plist>

@@ -1,0 +1,82 @@
+ObjC.import("Foundation");
+ObjC.bindFunction("objc_msgSend", ["void", ["id", "selector", "id", "id"]]);
+
+function run(arguments) {
+  try {
+    const framework = $.NSBundle.bundleWithPath(
+      "/System/Library/PrivateFrameworks/MediaRemote.framework/"
+    );
+    framework.load;
+    if (arguments[0] === "control") {
+      const commands = { play: 0, pause: 1, toggle: 2, next: 4, previous: 5 };
+      const command = commands[arguments[1]];
+      if (command === undefined) return "unsupported";
+      ObjC.bindFunction("MRMediaRemoteSendCommand", ["bool", ["int", "id"]]);
+      return $.MRMediaRemoteSendCommand(command, $.NSDictionary.dictionary)
+        ? "sent" : "unavailable";
+    }
+    const request = $.NSClassFromString("MRNowPlayingRequest");
+    if (!request || request.isNil()) return "{}";
+    const item = request.localNowPlayingItem;
+    if (!item || item.isNil()) return "{}";
+    const info = item.nowPlayingInfo;
+    if (!info || info.isNil()) return "{}";
+    if (arguments[0] === "artwork") {
+      const player = request.localNowPlayingPlayerPath;
+      if (!player || player.isNil()) return "";
+      const scoped = request.alloc.initWithPlayerPath(player);
+      let encoded = "";
+      let completed = false;
+      const callback = ObjC.block(["void", ["id", "id"]], function(artwork, error) {
+        completed = true;
+        if (error && !error.isNil()) return;
+        if (!artwork || artwork.isNil()) return;
+        const selector = $.NSSelectorFromString("imageData");
+        const bytes = artwork.respondsToSelector(selector) ? artwork.imageData : artwork;
+        if (bytes && !bytes.isNil() && bytes.length > 0 && bytes.length <= 1000000) {
+          encoded = ObjC.unwrap(bytes.base64EncodedStringWithOptions(0));
+        }
+      });
+      const holder = $.NSPredicate.predicateWithBlock(callback);
+      const block = holder.valueForKey("block");
+      $.objc_msgSend(scoped,
+        $.NSSelectorFromString("requestNowPlayingItemArtworkWithCompletion:"),
+        block, null);
+      const deadline = $.NSDate.dateWithTimeIntervalSinceNow(1.2);
+      while (!completed && Number(deadline.timeIntervalSinceNow) > 0) {
+        $.NSRunLoop.currentRunLoop.runUntilDate(
+          $.NSDate.dateWithTimeIntervalSinceNow(0.02));
+      }
+      return encoded;
+    }
+    const wanted = {
+      Title: true, Artist: true, Duration: true, ElapsedTime: true,
+      PlaybackRate: true, Timestamp: true
+    };
+    const result = { playing: Boolean(request.localIsPlaying) };
+    let key = null;
+    const iterator = info.keyEnumerator;
+    while ((key = iterator.nextObject) && !key.isNil()) {
+      const name = String(ObjC.unwrap(key)).replace("kMRMediaRemoteNowPlayingInfo", "");
+      if (!wanted[name]) continue;
+      const value = info.objectForKey(key);
+      if (!value || value.isNil()) continue;
+      if (value.isKindOfClass($.NSDate)) {
+        result[name] = Number(value.timeIntervalSince1970);
+      } else if (value.isKindOfClass($.NSNumber) || value.isKindOfClass($.NSString)) {
+        result[name] = ObjC.unwrap(value);
+      }
+    }
+    const path = request.localNowPlayingPlayerPath;
+    if (path && !path.isNil() && path.client && !path.client.isNil()) {
+      const client = path.client;
+      const parent = client.parentApplicationBundleIdentifier;
+      const bundle = client.bundleIdentifier;
+      if (parent && !parent.isNil()) result.bundle = ObjC.unwrap(parent);
+      else if (bundle && !bundle.isNil()) result.bundle = ObjC.unwrap(bundle);
+    }
+    return JSON.stringify(result);
+  } catch (_) {
+    return arguments[0] === "artwork" ? "" : "{}";
+  }
+}

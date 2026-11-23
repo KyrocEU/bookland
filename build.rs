@@ -1,0 +1,34 @@
+fn main() {
+    #[cfg(target_os = "macos")]
+    {
+        cc::Build::new()
+            .file("src/glass.m")
+            .file("src/calendar.m")
+            .file("src/shortcuts.m")
+            .file("src/folder.m")
+            .file("src/pocket.m")
+            .file("src/pocket_drag.m")
+            .file("src/clipboard.m")
+            .file("src/prompter_speech.m")
+            .file("src/mirror.m")
+            .flag("-fobjc-arc")
+            .flag("-mmacosx-version-min=26.0")
+            .compile("nooklet_glass");
+        println!("cargo:rustc-link-lib=framework=AppKit");
+        println!("cargo:rustc-link-lib=framework=QuartzCore");
+        println!("cargo:rustc-link-lib=framework=EventKit");
+        println!("cargo:rustc-link-lib=framework=Carbon");
+        println!("cargo:rustc-link-lib=framework=AVFoundation");
+        println!("cargo:rustc-link-lib=framework=CoreMedia");
+        println!("cargo:rustc-link-lib=framework=Speech");
+        println!("cargo:rerun-if-changed=src/glass.m");
+        println!("cargo:rerun-if-changed=src/calendar.m");
+        println!("cargo:rerun-if-changed=src/shortcuts.m");
+        println!("cargo:rerun-if-changed=src/folder.m");
+        println!("cargo:rerun-if-changed=src/pocket.m");
+        println!("cargo:rerun-if-changed=src/pocket_drag.m");
+        println!("cargo:rerun-if-changed=src/clipboard.m");
+        println!("cargo:rerun-if-changed=src/prompter_speech.m");
+        println!("cargo:rerun-if-changed=src/mirror.m");
+    }
+}

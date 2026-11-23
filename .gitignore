@@ -1,0 +1,11 @@
+.DS_Store
+.env
+.env.*
+target/
+Bookland.app/
+vendor/yt-dlp_macos
+UNVERIFIED.md
+MECHANICS.md
+mechanics.json
+DEV_NOTES.md
+*.log
