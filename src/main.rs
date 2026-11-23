@@ -54,7 +54,7 @@ unsafe extern "C" {
     fn nooklet_anchor_host_to_screen_top(enabled: i32);
     fn nooklet_reduce_motion() -> i32;
     fn nooklet_physical_notch(width: *mut f64, height: *mut f64) -> i32;
-    fn nooklet_progress_ring_set(enabled: i32, x: f64, y: f64);
+    fn nooklet_progress_ring_set(enabled: i32, x: f64, y: f64, usage_style: i32);
     fn bookland_volume_hud_set(enabled: i32);
     fn bookland_airpods_watch_set(enabled: i32) -> i32;
     fn bookland_airpods_events_take() -> i32;
@@ -692,6 +692,7 @@ struct DeskApp {
     opened_by_hover: bool,
     hover_blocked_until_exit: bool,
     native_ring_center: Option<egui::Pos2>,
+    native_usage_ring_center: Option<egui::Pos2>,
     native_morph_shell: Option<(egui::Rect, f32, f32, f32)>,
     island_gesture: IslandGesture,
     last_haptic_expanded: bool,
@@ -2057,6 +2058,23 @@ fn section_title(ui: &mut egui::Ui, text: &str) {
 }
 
 impl DeskApp {
+    fn open_from_hover(&mut self) {
+        if let Some(done) = self.agent_completion.take() {
+            self.workspace = Workspace::Agents;
+            self.agent_chat_open = false;
+            self.agent_usage_view = false;
+            self.selected_agent = self.agents.iter()
+                .position(|agent| agent.path == done.path && agent.source == done.source)
+                .unwrap_or(0);
+        } else {
+            self.choose_hover_workspace();
+        }
+        self.expanded = true;
+        self.opened_by_hover = true;
+        self.last_hovered = Instant::now();
+        self.hover_opened_at = self.last_hovered;
+    }
+
     fn choose_hover_workspace(&mut self) {
         if self.workspace_chosen_by_user || !self.prefs.agent_monitor
             || self.workspace != Workspace::Nook { return; }
@@ -2198,6 +2216,7 @@ impl DeskApp {
             opened_by_hover: false,
             hover_blocked_until_exit: false,
             native_ring_center: None,
+            native_usage_ring_center: None,
             native_morph_shell: None,
             island_gesture: IslandGesture::default(),
             last_haptic_expanded: expanded,
@@ -2406,11 +2425,18 @@ impl DeskApp {
                         clock_wanted as i32, context,
                         clock_wanted.then_some(bookland_pocket_wake)) != 0 && clock_wanted;
                 }
-                if let Some(center) = self.native_ring_center.filter(|_| !self.preview_mode
-                    && self.screenshot.is_none() && self.transition == 0.0) {
-                    nooklet_progress_ring_set(1, center.x as f64, center.y as f64);
+                if !self.preview_mode && self.screenshot.is_none() {
+                    if let Some(center) = self.native_ring_center.filter(|_|
+                        self.transition == 0.0) {
+                        nooklet_progress_ring_set(1, center.x as f64, center.y as f64, 0);
+                    } else if let Some(center) = self.native_usage_ring_center.filter(|_|
+                        self.transition == 1.0) {
+                        nooklet_progress_ring_set(1, center.x as f64, center.y as f64, 1);
+                    } else {
+                        nooklet_progress_ring_set(0, 0.0, 0.0, 0);
+                    }
                 } else {
-                    nooklet_progress_ring_set(0, 0.0, 0.0);
+                    nooklet_progress_ring_set(0, 0.0, 0.0, 0);
                 }
                 nooklet_anchor_host_to_screen_top((!self.preview_mode && self.screenshot.is_none()
                     && !(self.expanded && self.clipboard_bottom_sheet
@@ -2487,6 +2513,7 @@ impl DeskApp {
         }
     }
     fn save_prefs(&self) {
+        if self.preview_mode || self.screenshot.is_some() { return; }
         if let Ok(value) = serde_json::to_string_pretty(&self.prefs) {
             let saved = preferences_path()
                 .and_then(|path| {
@@ -2501,6 +2528,7 @@ impl DeskApp {
         }
     }
     fn save_data(&self) {
+        if self.preview_mode || self.screenshot.is_some() { return; }
         let data = AppData {
             files: self.files.clone(),
             clipboard: if self.prefs.persist_clipboard { self.clipboard.clone() } else { Vec::new() },
@@ -6102,15 +6130,23 @@ impl DeskApp {
                             egui::Sense::hover());
                         let center = area.center_top() + Vec2::new(0.0, 33.0);
                         let blue = Color32::from_rgb(87, 145, 248);
-                        ui.painter().circle_stroke(center, 33.0,
-                            Stroke::new(3.0, Color32::from_rgb(27, 48, 82)));
-                        let time = ui.input(|input| input.time) as f32;
-                        let arc: Vec<_> = (0..=32).map(|step| {
-                            let angle = if agent.status == "Working" { time * 1.8 } else { -1.57 }
-                                + step as f32 / 32.0 * std::f32::consts::TAU * 0.39;
-                            center + Vec2::angled(angle) * 33.0
-                        }).collect();
-                        ui.painter().add(egui::Shape::line(arc, Stroke::new(3.0, blue)));
+                        let native_ring = agent.status == "Working" && self.native_installed
+                            && self.transition == 1.0 && !self.preview_mode
+                            && self.screenshot.is_none();
+                        if native_ring {
+                            self.native_usage_ring_center = Some(center);
+                        } else {
+                            ui.painter().circle_stroke(center, 33.0,
+                                Stroke::new(3.0, Color32::from_rgb(27, 48, 82)));
+                            let time = ui.input(|input| input.time) as f32;
+                            let arc: Vec<_> = (0..=32).map(|step| {
+                                let angle = if agent.status == "Working" { time * 1.8 }
+                                    else { -1.57 }
+                                    + step as f32 / 32.0 * std::f32::consts::TAU * 0.39;
+                                center + Vec2::angled(angle) * 33.0
+                            }).collect();
+                            ui.painter().add(egui::Shape::line(arc, Stroke::new(3.0, blue)));
+                        }
                         if agent.status == "Working" {
                             let satellite = center + Vec2::new(24.0, -24.0);
                             ui.painter().circle_filled(satellite, 6.5,
@@ -7092,18 +7128,7 @@ impl DeskApp {
             && !response.context_menu_opened() && !response.secondary_clicked()
             && ui.ctx().input(|input| !input.pointer.any_down())
         {
-            if let Some(done) = self.agent_completion.take() {
-                self.workspace = Workspace::Agents;
-                self.agent_chat_open = false;
-                self.agent_usage_view = false;
-                self.selected_agent = self.agents.iter()
-                    .position(|agent| agent.path == done.path && agent.source == done.source)
-                    .unwrap_or(0);
-            } else { self.choose_hover_workspace(); }
-            self.expanded = true;
-            self.opened_by_hover = true;
-            self.last_hovered = Instant::now();
-            self.hover_opened_at = self.last_hovered;
+            self.open_from_hover();
         }
     }
     fn morphing_notch(&mut self, ui: &mut egui::Ui) {
@@ -8296,9 +8321,33 @@ impl eframe::App for DeskApp {
                 self.clipboard_focus_pending = self.prefs.clipboard_focus_search;
             }
         }
+        // Use the last settled notch rect before clearing frame geometry. A
+        // tracking-area wake can now choose the open target before the spring
+        // step, saving the extra UI frame that the in-panel hover path needed.
+        if !self.expanded && self.transition == 0.0 && self.prefs.open_on_hover
+            && self.screenshot.is_none() && !self.preview_mode
+            && !ctx.is_popup_open()
+            && ctx.input(|input| !input.pointer.any_down() && !input.pointer.any_click())
+        {
+            if let Some(rect) = self.open_notch_rect {
+                #[cfg(target_os = "macos")]
+                let physically_hovered = unsafe { bookland_pointer_over_island_rect(
+                    rect.min.x as f64, rect.min.y as f64,
+                    rect.width() as f64, rect.height() as f64, 0.0, true,
+                ) };
+                #[cfg(not(target_os = "macos"))]
+                let physically_hovered = ctx.input(|input| input.pointer.hover_pos())
+                    .is_some_and(|pointer| rect.contains(pointer));
+                if hover_allowed_after_close(&mut self.hover_blocked_until_exit,
+                    physically_hovered) {
+                    self.open_from_hover();
+                }
+            }
+        }
         self.glass_rects = [None; 8];
         self.open_notch_rect = None;
         self.native_ring_center = None;
+        self.native_usage_ring_center = None;
         self.native_morph_shell = None;
         let now = Instant::now();
         let (dragging_file, pointer_x) = ctx.input(|input|
@@ -8593,7 +8642,13 @@ fn main() -> eframe::Result {
             agents.iter().filter(|agent| agent.status == "Working").count());
         return Ok(());
     }
-    let preview_mode = args.iter().any(|arg| arg == "--preview");
+    // A separately signed staging bundle can opt into preview behavior without
+    // replacing the running app or changing its Calendar authorization.
+    let bundled_preview = std::env::current_exe().ok()
+        .and_then(|executable| executable.parent()
+            .map(|folder| folder.join("../Resources/bookland-preview-mode")))
+        .is_some_and(|flag| flag.is_file());
+    let preview_mode = bundled_preview || args.iter().any(|arg| arg == "--preview");
     let screenshot = args
         .windows(2)
         .find(|pair| pair[0] == "--screenshot")

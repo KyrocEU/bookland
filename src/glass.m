@@ -15,6 +15,7 @@ static BOOL nookletMorphAnimating;
 static NSWindow *nookletProgressWindow;
 static CAShapeLayer *nookletProgressTrack;
 static CAShapeLayer *nookletProgressArc;
+static int nookletProgressStyle = -1;
 static id booklandScrollMonitor;
 static double booklandScrollDeltaX;
 static double booklandScrollDeltaY;
@@ -449,10 +450,44 @@ void nooklet_morph_shell_set(int enabled, double x, double y, double width,
     CGPathRelease(path);
 }
 
-void nooklet_progress_ring_set(int enabled, double x, double y) {
+static void booklandConfigureProgressRing(int usageStyle) {
+    if (!nookletProgressTrack || !nookletProgressArc
+        || nookletProgressStyle == usageStyle) return;
+    CGFloat radius = usageStyle ? 33.0 : 7.0;
+    CGFloat size = usageStyle ? 72.0 : 28.0;
+    CGFloat midpoint = size * 0.5;
+    CGMutablePathRef track = CGPathCreateMutable();
+    CGPathAddEllipseInRect(track, NULL, CGRectMake(midpoint - radius,
+        midpoint - radius, radius * 2.0, radius * 2.0));
+    CGMutablePathRef arc = CGPathCreateMutable();
+    CGPathAddArc(arc, NULL, midpoint, midpoint, radius, 0,
+        usageStyle ? -2.0 * M_PI * 0.39 : -M_PI_2, true);
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    nookletProgressTrack.bounds = CGRectMake(0, 0, size, size);
+    nookletProgressTrack.path = track;
+    nookletProgressTrack.lineWidth = usageStyle ? 3.0 : 1.5;
+    nookletProgressTrack.strokeColor = usageStyle
+        ? [NSColor colorWithCalibratedRed:0.106 green:0.188 blue:0.322 alpha:1.0].CGColor
+        : [NSColor colorWithCalibratedRed:0.204 green:0.365 blue:0.612 alpha:0.43].CGColor;
+    nookletProgressArc.bounds = CGRectMake(0, 0, size, size);
+    nookletProgressArc.path = arc;
+    nookletProgressArc.lineWidth = usageStyle ? 3.0 : 2.0;
+    nookletProgressArc.strokeColor = usageStyle
+        ? [NSColor colorWithCalibratedRed:0.341 green:0.569 blue:0.973 alpha:1.0].CGColor
+        : [NSColor colorWithCalibratedRed:0.294 green:0.545 blue:0.984 alpha:1.0].CGColor;
+    [CATransaction commit];
+    CGPathRelease(track);
+    CGPathRelease(arc);
+    nookletProgressStyle = usageStyle;
+}
+
+void nooklet_progress_ring_set(int enabled, double x, double y, int usageStyle) {
     if (!nookletHostWindow) return;
     if (!enabled) {
         if (nookletProgressWindow.isVisible) [nookletProgressWindow orderOut:nil];
+        if ([nookletProgressArc animationForKey:@"bookland-progress-spin"])
+            [nookletProgressArc removeAnimationForKey:@"bookland-progress-spin"];
         return;
     }
     if (!nookletProgressWindow) {
@@ -470,30 +505,21 @@ void nooklet_progress_ring_set(int enabled, double x, double y) {
         content.layer.backgroundColor = NSColor.clearColor.CGColor;
         content.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
         window.contentView = content;
-        CGMutablePathRef path = CGPathCreateMutable();
-        CGPathAddEllipseInRect(path, NULL, CGRectMake(7, 7, 14, 14));
         nookletProgressTrack = [CAShapeLayer layer];
-        nookletProgressTrack.bounds = CGRectMake(0, 0, 28, 28);
-        nookletProgressTrack.path = path;
         nookletProgressTrack.fillColor = NSColor.clearColor.CGColor;
-        nookletProgressTrack.strokeColor = [NSColor colorWithCalibratedRed:0.204
-            green:0.365 blue:0.612 alpha:0.43].CGColor;
-        nookletProgressTrack.lineWidth = 1.5;
         [content.layer addSublayer:nookletProgressTrack];
-        CGPathRelease(path);
-
-        path = CGPathCreateMutable();
-        CGPathAddArc(path, NULL, 14, 14, 7, 0, -M_PI_2, true);
         nookletProgressArc = [CAShapeLayer layer];
-        nookletProgressArc.bounds = CGRectMake(0, 0, 28, 28);
-        nookletProgressArc.path = path;
         nookletProgressArc.fillColor = NSColor.clearColor.CGColor;
-        nookletProgressArc.strokeColor = [NSColor colorWithCalibratedRed:0.294
-            green:0.545 blue:0.984 alpha:1.0].CGColor;
-        nookletProgressArc.lineWidth = 2.0;
         nookletProgressArc.lineCap = kCALineCapRound;
         [content.layer addSublayer:nookletProgressArc];
-        CGPathRelease(path);
+        [nookletHostWindow addChildWindow:window ordered:NSWindowAbove];
+        nookletProgressWindow = window;
+    }
+    booklandConfigureProgressRing(usageStyle != 0);
+    if (nooklet_reduce_motion()) {
+        if ([nookletProgressArc animationForKey:@"bookland-progress-spin"])
+            [nookletProgressArc removeAnimationForKey:@"bookland-progress-spin"];
+    } else if (![nookletProgressArc animationForKey:@"bookland-progress-spin"]) {
         CABasicAnimation *spin = [CABasicAnimation animationWithKeyPath:@"transform.rotation.z"];
         spin.fromValue = @0;
         spin.toValue = @(-2.0 * M_PI);
@@ -501,8 +527,6 @@ void nooklet_progress_ring_set(int enabled, double x, double y) {
         spin.repeatCount = HUGE_VALF;
         spin.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionLinear];
         [nookletProgressArc addAnimation:spin forKey:@"bookland-progress-spin"];
-        [nookletHostWindow addChildWindow:window ordered:NSWindowAbove];
-        nookletProgressWindow = window;
     }
     if (!NSEqualRects(nookletProgressWindow.frame, nookletHostWindow.frame)) {
         [nookletProgressWindow setFrame:nookletHostWindow.frame display:NO];
