@@ -6552,7 +6552,18 @@ impl DeskApp {
                         }
                     });
                 }
-                else if busy { label(ui, "This chat is working in Codex. Wait for it to finish before replying.", 11.0, MUTED); }
+                else if busy {
+                    ui.horizontal_wrapped(|ui| {
+                        label(ui, "This desktop turn is active. Review its requests in Codex.",
+                            11.0, MUTED);
+                        if ui.small_button("Open Codex ↗")
+                            .on_hover_text("Show the Codex app to review its active turn")
+                            .clicked() {
+                            let _ = Command::new("open")
+                                .args(["-b", "com.openai.codex"]).spawn();
+                        }
+                    });
+                }
                 else if !self.desktop_codex_status.is_empty() {
                     let status: String = self.desktop_codex_status.chars().take(125).collect();
                     ui.add(egui::Label::new(RichText::new(status).size(11.0).color(MUTED)).wrap());
@@ -7787,7 +7798,7 @@ impl DeskApp {
                         18.0, TEXT);
                     label(ui, "A living island for your Mac.", 13.0, MUTED);
                     ui.add_space(8.0);
-                    label(ui, "An independent open-source macOS app inspired by the hover island in NotchNook. Built with Rust and native AppKit Liquid Glass.",
+                    label(ui, "Bookland is free and open source, with no Bookland account, trial, or subscription. Built with Rust and native AppKit Liquid Glass.",
                         12.0, TEXT);
                     ui.add_space(9.0);
                     ui.horizontal(|ui| {
@@ -7798,11 +7809,11 @@ impl DeskApp {
                     });
                 });
                 ui.add_space(12.0);
-                section_title(ui, "OPEN SOURCE PREVIEW");
+                section_title(ui, "INDEPENDENT OPEN SOURCE PROJECT");
                 card().show(ui, |ui| {
                     label(ui, "Bookland's original code is MIT licensed. Third-party components and marks keep their own terms; see the repository notices.",
                         12.0, TEXT);
-                    label(ui, "The island and major workspaces are working. Full NotchNook feature and animation parity is still in progress.",
+                    label(ui, "The island and major workspaces are working. Motion, integrations, and feature coverage are still in progress.",
                         12.0, MUTED);
                 });
             }

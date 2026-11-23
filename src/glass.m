@@ -5,6 +5,7 @@
 // Keep winit's content view untouched: it owns keyboard and IME state.
 // A non-interactive child window carries native glass behind its transparent pixels.
 static NSGlassEffectView *nookletGlass[8];
+static CGFloat nookletGlassTintAlpha[8];
 static NSView *nookletContainer;
 static NSWindow *nookletHostWindow;
 static NSWindow *nookletGlassWindow;
@@ -303,18 +304,30 @@ void nooklet_set_glass(int slot, double x, double y, double width, double height
     }
     NSGlassEffectView *view = nookletGlass[slot];
     if (!enabled || width <= 0 || height <= 0) {
-        if (view) view.hidden = YES;
+        if (view && !view.hidden) view.hidden = YES;
         return;
     }
     view = nookletPrepareGlassView(slot);
     double flippedY = nookletContainer.bounds.size.height - y - height;
+    NSRect frame = NSMakeRect(x, flippedY, width, height);
+    CGFloat alpha = fmax(0.0, fmin(1.0, opacity));
+    CGFloat tintAlpha = fmax(0.03, fmin(0.12, level * 0.08));
+    BOOL frameChanged = !NSEqualRects(view.frame, frame);
+    BOOL radiusChanged = fabs(view.cornerRadius - radius) > 0.001;
+    BOOL tintChanged = fabs(nookletGlassTintAlpha[slot] - tintAlpha) > 0.0001;
+    BOOL alphaChanged = fabs(view.alphaValue - alpha) > 0.001;
+    if (!view.hidden && !frameChanged && !radiusChanged && !tintChanged
+        && !alphaChanged) return;
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
-    view.frame = NSMakeRect(x, flippedY, width, height);
-    view.cornerRadius = radius;
-    view.tintColor = [NSColor colorWithCalibratedRed:0.46 green:0.50 blue:0.58
-                                              alpha:fmax(0.03, fmin(0.12, level * 0.08))];
-    view.alphaValue = fmax(0.0, fmin(1.0, opacity));
+    if (frameChanged) view.frame = frame;
+    if (radiusChanged) view.cornerRadius = radius;
+    if (tintChanged) {
+        view.tintColor = [NSColor colorWithCalibratedRed:0.46 green:0.50 blue:0.58
+                                                  alpha:tintAlpha];
+        nookletGlassTintAlpha[slot] = tintAlpha;
+    }
+    if (alphaChanged) view.alphaValue = alpha;
     view.hidden = NO;
     [CATransaction commit];
 }
@@ -495,10 +508,13 @@ void nooklet_progress_ring_set(int enabled, double x, double y) {
         [nookletProgressWindow setFrame:nookletHostWindow.frame display:NO];
     }
     CGPoint center = CGPointMake(x, nookletProgressWindow.contentView.bounds.size.height - y);
-    [CATransaction begin];
-    [CATransaction setDisableActions:YES];
-    nookletProgressTrack.position = center;
-    nookletProgressArc.position = center;
-    [CATransaction commit];
+    if (!CGPointEqualToPoint(nookletProgressTrack.position, center)
+        || !CGPointEqualToPoint(nookletProgressArc.position, center)) {
+        [CATransaction begin];
+        [CATransaction setDisableActions:YES];
+        nookletProgressTrack.position = center;
+        nookletProgressArc.position = center;
+        [CATransaction commit];
+    }
     if (!nookletProgressWindow.isVisible) [nookletProgressWindow orderFront:nil];
 }
