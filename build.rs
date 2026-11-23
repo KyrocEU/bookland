@@ -12,6 +12,7 @@ fn main() {
             .file("src/prompter_speech.m")
             .file("src/mirror.m")
             .file("src/volume_hud.m")
+            .file("src/audio_spectrum.m")
             .file("src/airpods_events.m")
             .flag("-fobjc-arc")
             .flag("-mmacosx-version-min=26.0")
@@ -37,6 +38,7 @@ fn main() {
         println!("cargo:rerun-if-changed=src/prompter_speech.m");
         println!("cargo:rerun-if-changed=src/mirror.m");
         println!("cargo:rerun-if-changed=src/volume_hud.m");
+        println!("cargo:rerun-if-changed=src/audio_spectrum.m");
         println!("cargo:rerun-if-changed=src/airpods_events.m");
     }
 }

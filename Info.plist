@@ -19,6 +19,7 @@
   <key>NSMicrophoneUsageDescription</key><string>Bookland listens to your speech only while Voice Prompter is running so it can follow your script.</string>
   <key>NSCameraUsageDescription</key><string>Bookland uses the camera only while you open the Mirror widget.</string>
   <key>NSBluetoothAlwaysUsageDescription</key><string>Bookland shows AirPods connection and battery activity beside the notch.</string>
+  <key>NSAudioCaptureUsageDescription</key><string>Bookland reads system audio only while Music is open and Audio spectrum is enabled, to display live frequency levels. Audio is not saved.</string>
   <key>NSSpeechRecognitionUsageDescription</key><string>Bookland recognizes your speech while Voice Prompter is running to follow your script. On-device recognition is the default.</string>
 </dict>
 </plist>

@@ -67,6 +67,10 @@ unsafe extern "C" {
     fn bookland_volume_hud_set(enabled: i32, inline_mode: i32, closed_width: f64);
     fn bookland_system_volume_get() -> f32;
     fn bookland_system_volume_set(value: f32) -> i32;
+    fn bookland_audio_spectrum_set(enabled: i32);
+    fn bookland_audio_spectrum_copy(levels: *mut f32, count: usize) -> i32;
+    #[cfg(test)]
+    fn bookland_audio_spectrum_test_tone(frequency: f32, levels: *mut f32, count: usize);
     fn bookland_airpods_watch_set(enabled: i32) -> i32;
     fn bookland_airpods_events_take() -> i32;
     fn bookland_airpods_watch_status() -> i32;
@@ -842,6 +846,9 @@ struct DeskApp {
     volume_hud_monitor_enabled: bool,
     volume_hud_inline_enabled: bool,
     volume_hud_closed_width: f32,
+    spectrum_capture_active: bool,
+    spectrum_state: i32,
+    spectrum_levels: [f32; 16],
     airpods_events_attempted: bool,
     airpods_events_enabled: bool,
     pocket_wake_context: Box<egui::Context>,
@@ -1395,6 +1402,29 @@ mod system_media_tests {
         assert_eq!(snapshot.app.as_deref(), Some("Google Chrome"));
         assert_eq!(snapshot.title, "Another track");
         assert_eq!(snapshot.position, 30.0);
+    }
+}
+#[cfg(all(test, target_os = "macos"))]
+mod audio_spectrum_tests {
+    #[test]
+    fn real_tone_moves_energy_to_higher_frequency_bands() {
+        let mut low = [0.0_f32; 16];
+        let mut high = [0.0_f32; 16];
+        unsafe {
+            super::bookland_audio_spectrum_test_tone(220.0,
+                low.as_mut_ptr(), low.len());
+            super::bookland_audio_spectrum_test_tone(2200.0,
+                high.as_mut_ptr(), high.len());
+        }
+        let peak = |levels: &[f32; 16]| levels.iter().enumerate()
+            .max_by(|left, right| left.1.total_cmp(right.1))
+            .map(|(index, _)| index).unwrap();
+        assert!(low.iter().all(|value| value.is_finite() && (0.0..=1.0).contains(value)));
+        assert!(high.iter().all(|value| value.is_finite() && (0.0..=1.0).contains(value)));
+        assert!(low[peak(&low)] > 0.2);
+        assert!(high[peak(&high)] > 0.2);
+        assert!(peak(&high) > peak(&low) + 3,
+            "frequency bands should distinguish a 220 Hz tone from 2.2 kHz");
     }
 }
 fn read_media(source: &str) -> MediaSnapshot {
@@ -2428,6 +2458,9 @@ impl DeskApp {
             volume_hud_monitor_enabled: false,
             volume_hud_inline_enabled: false,
             volume_hud_closed_width: 0.0,
+            spectrum_capture_active: false,
+            spectrum_state: 0,
+            spectrum_levels: [0.0; 16],
             airpods_events_attempted: false,
             airpods_events_enabled: false,
             pocket_wake_context: Box::new(repaint_context),
@@ -3174,6 +3207,7 @@ impl DeskApp {
         self.poll_pocket();
         self.poll_music_airplay();
         self.poll_mirror(ctx);
+        self.poll_audio_spectrum(ctx);
         let mut video_events = Vec::new();
         if let Some(receiver) = &self.video_rx {
             while let Ok(event) = receiver.try_recv() { video_events.push(event); }
@@ -3729,6 +3763,42 @@ impl DeskApp {
             if let Some(path) = file.path {
                 self.add_pocket_file(path);
             }
+        }
+    }
+    fn poll_audio_spectrum(&mut self, ctx: &egui::Context) {
+        let wanted = self.prefs.audio_spectrum && self.expanded
+            && self.workspace == Workspace::Music && !self.preview_mode
+            && self.screenshot.is_none();
+        #[cfg(target_os = "macos")]
+        unsafe {
+            if wanted != self.spectrum_capture_active {
+                bookland_audio_spectrum_set(wanted as i32);
+                self.spectrum_capture_active = wanted;
+            }
+            if wanted {
+                self.spectrum_state = bookland_audio_spectrum_copy(
+                    self.spectrum_levels.as_mut_ptr(), self.spectrum_levels.len());
+                ctx.request_repaint_after(Duration::from_millis(50));
+            } else {
+                self.spectrum_state = 0;
+                self.spectrum_levels.fill(0.0);
+            }
+        }
+        #[cfg(not(target_os = "macos"))]
+        let _ = (wanted, ctx);
+    }
+    fn paint_audio_spectrum(&self, ui: &mut egui::Ui, width: f32, height: f32) {
+        let (rect, _) = ui.allocate_exact_size(Vec2::new(width, height), egui::Sense::hover());
+        let width = rect.width() / self.spectrum_levels.len() as f32;
+        for (index, raw) in self.spectrum_levels.iter().enumerate() {
+            let level = if self.spectrum_state == 2 { raw.clamp(0.0, 1.0) } else { 0.0 };
+            let bar_height = 2.0 + level * (rect.height() - 2.0);
+            let x = rect.left() + index as f32 * width + width * 0.15;
+            let bar = egui::Rect::from_min_size(
+                egui::pos2(x, rect.bottom() - bar_height),
+                Vec2::new(width * 0.7, bar_height));
+            ui.painter().rect_filled(bar, 2.0,
+                Color32::from_rgb(113, 180, 252));
         }
     }
     fn remaining(&self) -> u64 {
@@ -4708,6 +4778,14 @@ impl DeskApp {
                 ui.add_space(15.0);
                 music_text(ui, &self.media_title, 20.0, TEXT, false, false);
                 music_text(ui, &self.media_artist, 13.0, MUTED, false, false);
+                if self.prefs.audio_spectrum {
+                    ui.add_space(8.0);
+                    self.paint_audio_spectrum(ui, 260.0, 25.0);
+                    if self.spectrum_state < 0 {
+                        label(ui, "System Audio Recording is unavailable or not allowed.",
+                            11.0, MUTED);
+                    }
+                }
                 if !self.lyrics_lines.is_empty()
                     && small_button(ui, if self.lyrics_open { "L · Hide lyrics" } else { "L · Lyrics" })
                         .on_hover_text("Show synced lyrics").clicked() {
@@ -6463,6 +6541,13 @@ impl DeskApp {
                     });
                 } else {
                     ui.add_space(31.0);
+                }
+                if self.prefs.audio_spectrum {
+                    self.paint_audio_spectrum(ui, (width - 44.0).max(100.0), 19.0);
+                    if self.spectrum_state < 0 {
+                        label(ui, "Allow System Audio Recording to show the spectrum.",
+                            10.0, MUTED);
+                    }
                 }
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
@@ -8539,11 +8624,9 @@ impl DeskApp {
                 });
             ui.checkbox(&mut self.prefs.show_synced_lyrics, "Show synced lyrics when available");
             label(ui, "Looks up the song title and artist on LRCLIB when the track changes.", 11.0, MUTED);
-            ui.add_enabled(
-                false,
-                egui::Checkbox::new(&mut self.prefs.audio_spectrum, "Audio spectrum"),
-            )
-            .on_hover_text("Audio sample access is unavailable in this recreation.");
+            ui.checkbox(&mut self.prefs.audio_spectrum, "Live audio spectrum");
+            label(ui, "Uses System Audio Recording only while the Music panel is open. No audio is saved.",
+                11.0, MUTED);
         });
         ui.add_space(12.0);
         section_title(ui, "AIRPODS");
@@ -8843,6 +8926,7 @@ impl Drop for DeskApp {
             if self.animation_clock_enabled {
                 nooklet_animation_clock_set(0, std::ptr::null_mut(), None);
             }
+            if self.spectrum_capture_active { bookland_audio_spectrum_set(0); }
             if self.airpods_events_attempted { bookland_airpods_watch_set(0); }
         }
         if self.prefs.clipboard_clear_on_quit && !self.preview_mode {
