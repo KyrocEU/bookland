@@ -13,7 +13,8 @@ static AudioObjectPropertyListenerBlock booklandDeviceListener;
 static AudioObjectPropertyListenerBlock booklandLevelListener;
 static NSWindow *booklandVolumeWindow;
 static NSGlassEffectView *booklandVolumeGlass;
-static CAShapeLayer *booklandVolumeFill;
+enum { BooklandVolumeSegmentCount = 16 };
+static CALayer *booklandVolumeFill[BooklandVolumeSegmentCount];
 static CATextLayer *booklandVolumeText;
 static Float32 booklandLastVolume = -1;
 static BOOL booklandLastMuted;
@@ -139,28 +140,25 @@ static void booklandPrepareVolumeWindow(void) {
     text.foregroundColor = NSColor.whiteColor.CGColor;
     [overlay.layer addSublayer:text];
 
-    CGMutablePathRef path = CGPathCreateMutable();
-    CGPathMoveToPoint(path, NULL, 22, 16);
-    CGPathAddLineToPoint(path, NULL, 208, 16);
-    CAShapeLayer *track = [CAShapeLayer layer];
-    track.path = path;
-    track.fillColor = NSColor.clearColor.CGColor;
-    track.strokeColor = [NSColor colorWithCalibratedWhite:1 alpha:0.23].CGColor;
-    track.lineWidth = 5;
-    track.lineCap = kCALineCapRound;
-    [overlay.layer addSublayer:track];
-    CAShapeLayer *fill = [CAShapeLayer layer];
-    fill.path = path;
-    fill.fillColor = NSColor.clearColor.CGColor;
-    fill.strokeColor = [NSColor colorWithCalibratedRed:0.48 green:0.70 blue:1 alpha:1].CGColor;
-    fill.lineWidth = 5;
-    fill.lineCap = kCALineCapRound;
-    fill.strokeEnd = 0;
-    [overlay.layer addSublayer:fill];
-    CGPathRelease(path);
+    // Native HUDs use separate illuminated ticks. Keep these layers allocated
+    // while hidden; a level change animates only ticks that crossed a boundary.
+    for (int index = 0; index < BooklandVolumeSegmentCount; index++) {
+        CGRect segmentFrame = CGRectMake(21 + index * 11.75, 13, 8, 7);
+        CALayer *track = [CALayer layer];
+        track.frame = segmentFrame;
+        track.cornerRadius = 2.5;
+        track.backgroundColor = [NSColor colorWithCalibratedWhite:1 alpha:0.23].CGColor;
+        [overlay.layer addSublayer:track];
+        CALayer *fill = [CALayer layer];
+        fill.frame = segmentFrame;
+        fill.cornerRadius = 2.5;
+        fill.backgroundColor = [NSColor colorWithCalibratedRed:0.48 green:0.70 blue:1 alpha:1].CGColor;
+        fill.opacity = 0;
+        [overlay.layer addSublayer:fill];
+        booklandVolumeFill[index] = fill;
+    }
     booklandVolumeWindow = window;
     booklandVolumeGlass = glass;
-    booklandVolumeFill = fill;
     booklandVolumeText = text;
 }
 
@@ -199,17 +197,22 @@ static void booklandShowVolume(Float32 volume, BOOL muted) {
     booklandPrepareVolumeWindow();
     booklandVolumePosition();
     Float32 visible = muted ? 0 : volume;
-    CGFloat old = ((CAShapeLayer *)booklandVolumeFill.presentationLayer).strokeEnd;
-    if (!booklandVolumeFill.presentationLayer) old = booklandVolumeFill.strokeEnd;
-    CABasicAnimation *bar = [CABasicAnimation animationWithKeyPath:@"strokeEnd"];
-    bar.fromValue = @(old);
-    bar.toValue = @(visible);
-    bar.duration = 0.18;
-    bar.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
+    int lit = (int)lroundf(visible * BooklandVolumeSegmentCount);
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
-    booklandVolumeFill.strokeEnd = visible;
-    [booklandVolumeFill addAnimation:bar forKey:@"bookland-volume-fill"];
+    for (int index = 0; index < BooklandVolumeSegmentCount; index++) {
+        CALayer *fill = booklandVolumeFill[index];
+        float target = index < lit ? 1 : 0;
+        if (fill.opacity == target) continue;
+        float previous = fill.presentationLayer ? fill.presentationLayer.opacity : fill.opacity;
+        CABasicAnimation *fade = [CABasicAnimation animationWithKeyPath:@"opacity"];
+        fade.fromValue = @(previous);
+        fade.toValue = @(target);
+        fade.duration = 0.16;
+        fade.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
+        fill.opacity = target;
+        [fill addAnimation:fade forKey:@"bookland-volume-tick"];
+    }
     booklandVolumeText.string = muted ? @"Volume · Muted" :
         [NSString stringWithFormat:@"Volume · %d%%", (int)lroundf(volume * 100)];
     [CATransaction commit];
