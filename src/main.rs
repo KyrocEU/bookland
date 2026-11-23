@@ -4994,7 +4994,13 @@ impl DeskApp {
                 }
             });
             if request_pending {
-                label(ui, "No prompt? Quit and reopen Bookland, then try again.", 11.0, MUTED);
+                label(ui, "If no macOS prompt appears, check Bookland's Calendar access in System Settings.",
+                    11.0, MUTED);
+            }
+            if small_button(ui, "Open Calendar Permissions").clicked() {
+                let _ = Command::new("open")
+                    .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")
+                    .spawn();
             }
             ui.add_space(8.0);
         }
