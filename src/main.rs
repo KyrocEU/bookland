@@ -59,6 +59,8 @@ unsafe extern "C" {
     fn bookland_haptic_feedback();
     fn nooklet_hover_monitor_set(enabled: i32, context: *mut std::ffi::c_void,
         wake: Option<extern "C" fn(*mut std::ffi::c_void)>);
+    fn nooklet_animation_clock_set(enabled: i32, context: *mut std::ffi::c_void,
+        wake: Option<extern "C" fn(*mut std::ffi::c_void)>) -> i32;
     fn nooklet_set_glass(
         slot: i32, x: f64, y: f64, width: f64, height: f64,
         radius: f64, level: f64, opacity: f64, enabled: i32,
@@ -607,6 +609,7 @@ struct DeskApp {
     pocket_opened_from_drag: bool,
     pocket_monitor_enabled: bool,
     hover_monitor_enabled: bool,
+    animation_clock_enabled: bool,
     volume_hud_monitor_enabled: bool,
     pocket_wake_context: Box<egui::Context>,
     notes: String,
@@ -2006,6 +2009,7 @@ impl DeskApp {
             pocket_opened_from_drag: false,
             pocket_monitor_enabled: false,
             hover_monitor_enabled: false,
+            animation_clock_enabled: false,
             volume_hud_monitor_enabled: false,
             pocket_wake_context: Box::new(repaint_context),
             notes: data.notes,
@@ -2141,6 +2145,16 @@ impl DeskApp {
                 self.native_installed = nooklet_install_glass(self.native_view as *mut _) != 0;
             }
             if self.native_installed {
+                let target = if self.expanded { 1.0 } else { 0.0 };
+                let clock_wanted = self.transition != target && !self.preview_mode
+                    && self.screenshot.is_none();
+                if clock_wanted != self.animation_clock_enabled {
+                    let context = self.pocket_wake_context.as_ref() as *const egui::Context
+                        as *mut std::ffi::c_void;
+                    self.animation_clock_enabled = nooklet_animation_clock_set(
+                        clock_wanted as i32, context,
+                        clock_wanted.then_some(bookland_pocket_wake)) != 0 && clock_wanted;
+                }
                 if let Some(center) = self.native_ring_center.filter(|_| !self.preview_mode
                     && self.screenshot.is_none() && self.transition == 0.0) {
                     nooklet_progress_ring_set(1, center.x as f64, center.y as f64);
@@ -7384,6 +7398,9 @@ impl Drop for DeskApp {
             if self.hover_monitor_enabled {
                 nooklet_hover_monitor_set(0, std::ptr::null_mut(), None);
             }
+            if self.animation_clock_enabled {
+                nooklet_animation_clock_set(0, std::ptr::null_mut(), None);
+            }
         }
         if self.prefs.clipboard_clear_on_quit && !self.preview_mode {
             let favorites = self.clipboard_favorites.clone();
@@ -7559,8 +7576,13 @@ impl eframe::App for DeskApp {
         if self.screenshot.is_some() || target_changed {
             ctx.request_repaint();
         } else if self.transition != target {
-            // Wake ahead of the next 60 Hz vblank. A 16 ms timer can miss it
-            // and make the short morph appear to run at roughly 30 fps.
+            // The native display link requests frames on vblank while the
+            // island moves. Use a timer only when that link is unavailable.
+            #[cfg(target_os = "macos")]
+            if !self.animation_clock_enabled {
+                ctx.request_repaint_after(Duration::from_millis(8));
+            }
+            #[cfg(not(target_os = "macos"))]
             ctx.request_repaint_after(Duration::from_millis(8));
         } else {
             ctx.request_repaint_after(Duration::from_millis(if self.expanded { 100 }

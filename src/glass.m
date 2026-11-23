@@ -23,6 +23,50 @@ static NSPoint booklandHoverScreenPoint;
 static CFAbsoluteTime booklandHoverScreenPointAt;
 // -1: no event yet; 0: exited; 1: inside the host view.
 static int booklandHoverPointerState = -1;
+static CADisplayLink *booklandAnimationLink;
+static id booklandAnimationObserver;
+static void *booklandAnimationContext;
+static void (*booklandAnimationWake)(void *);
+
+@interface BooklandAnimationObserver : NSObject
+@end
+
+@implementation BooklandAnimationObserver
+- (void)displayFrame:(CADisplayLink *)link {
+    (void)link;
+    if (booklandAnimationWake) booklandAnimationWake(booklandAnimationContext);
+}
+@end
+
+// The link tracks the host window's display. Keep it paused outside the short
+// open/close morph so the closed island has no continuous animation wakeups.
+int nooklet_animation_clock_set(int enabled, void *context, void (*wake)(void *)) {
+    if (!enabled) {
+        if (booklandAnimationLink) booklandAnimationLink.paused = YES;
+        booklandAnimationContext = NULL;
+        booklandAnimationWake = NULL;
+        return 1;
+    }
+    if (!nookletHostWindow) return 0;
+    if (!booklandAnimationLink) {
+        booklandAnimationObserver = [BooklandAnimationObserver new];
+        booklandAnimationLink = [nookletHostWindow
+            displayLinkWithTarget:booklandAnimationObserver
+                       selector:@selector(displayFrame:)];
+        if (!booklandAnimationLink) {
+            booklandAnimationObserver = nil;
+            return 0;
+        }
+        booklandAnimationLink.preferredFrameRateRange = CAFrameRateRangeMake(60, 60, 60);
+        booklandAnimationLink.paused = YES;
+        [booklandAnimationLink addToRunLoop:NSRunLoop.mainRunLoop
+                                   forMode:NSRunLoopCommonModes];
+    }
+    booklandAnimationContext = context;
+    booklandAnimationWake = wake;
+    booklandAnimationLink.paused = NO;
+    return 1;
+}
 
 int nooklet_reduce_motion(void) {
     return NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceMotion ? 1 : 0;
