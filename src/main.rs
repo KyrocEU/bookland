@@ -77,6 +77,7 @@ unsafe extern "C" {
     fn nooklet_morph_shell_animate(frames: *const NativeMorphFrame, count: usize,
         duration: f64, minimum_width: f64, minimum_height: f64) -> i32;
     fn nooklet_calendar_status() -> i32;
+    fn nooklet_calendar_request_pending() -> i32;
     fn nooklet_calendar_month_index() -> i32;
     fn nooklet_calendar_month(offset: i32, buffer: *mut std::ffi::c_char,
         capacity: usize) -> usize;
@@ -4515,14 +4516,23 @@ impl DeskApp {
             }
         }
         if self.calendar_status == 0 {
+            #[cfg(target_os = "macos")]
+            let request_pending = unsafe { nooklet_calendar_request_pending() != 0 };
+            #[cfg(not(target_os = "macos"))]
+            let request_pending = false;
             ui.horizontal(|ui| {
                 label(ui, "Google Calendar syncs through macOS Calendar.", 12.0, MUTED);
-                if small_button(ui, "Connect Calendar").clicked() {
+                if request_pending {
+                    label(ui, "Waiting for macOS permission…", 12.0, MUTED);
+                } else if small_button(ui, "Connect Calendar").clicked() {
                     #[cfg(target_os = "macos")]
                     unsafe { nooklet_calendar_connect(); }
                     self.last_calendar_poll = Instant::now() - Duration::from_secs(35);
                 }
             });
+            if request_pending {
+                label(ui, "No prompt? Quit and reopen Bookland, then try again.", 11.0, MUTED);
+            }
             ui.add_space(8.0);
         }
         card().show(ui, |ui| {
