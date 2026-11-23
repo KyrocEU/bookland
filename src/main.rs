@@ -2108,15 +2108,24 @@ impl DeskApp {
     }
 
     fn choose_hover_workspace(&mut self) {
-        if self.workspace_chosen_by_user || !self.prefs.agent_monitor
-            || self.workspace != Workspace::Nook { return; }
-        if let Some(index) = self.agents.iter().position(|agent|
-            agent.source == "Codex" && agent.status == "Working")
-            .or_else(|| self.agents.iter().position(|agent| agent.source == "Codex")) {
+        if self.workspace_chosen_by_user { return; }
+        if let Some(index) = self.prefs.agent_monitor.then(|| self.agents.iter()
+            .position(|agent| agent.source == "Codex" && agent.status == "Working"))
+            .flatten() {
             self.workspace = Workspace::Agents;
             self.selected_agent = index;
             self.agent_usage_view = false;
             self.agent_chat_open = false;
+        } else if self.video_rx.is_some() || self.downloads.iter().any(|item| item.active) {
+            self.workspace = Workspace::Tray;
+        } else if let Some(index) = self.prefs.agent_monitor.then(|| self.agents.iter()
+            .position(|agent| agent.source == "Codex")).flatten() {
+            self.workspace = Workspace::Agents;
+            self.selected_agent = index;
+            self.agent_usage_view = false;
+            self.agent_chat_open = false;
+        } else {
+            self.workspace = Workspace::Nook;
         }
     }
     fn closed_dimensions(&self) -> (f32, f32) {
@@ -7044,6 +7053,39 @@ impl DeskApp {
                     } else {
                         label(ui, "No agent working", 12.0, MUTED);
                     }
+                } else if self.prefs.pocket_mode == "Auto"
+                    && (self.video_rx.is_some() || self.downloads.iter().any(|item| item.active)) {
+                    let (strip, _) = ui.allocate_exact_size(
+                        Vec2::new(width - 30.0, height - 8.0), egui::Sense::hover());
+                    let left = strip.left_center() + Vec2::new(9.0, 0.0);
+                    let right = strip.right_center() - Vec2::new(8.0, 0.0);
+                    self.native_ring_center = Some(right);
+                    ui.painter().text(left, Align2::LEFT_CENTER, "↓",
+                        FontId::proportional(16.0), ACCENT);
+                    if !self.native_installed || self.preview_mode || self.screenshot.is_some() {
+                        let angle = ui.input(|input| input.time) as f32 * 2.1;
+                        let arc = (0..=28).map(|step| right + Vec2::angled(
+                            angle + step as f32 / 28.0 * std::f32::consts::FRAC_PI_2) * 7.0)
+                            .collect::<Vec<_>>();
+                        ui.painter().circle_stroke(right, 7.0,
+                            Stroke::new(1.5, Color32::from_rgba_unmultiplied(52, 93, 156, 110)));
+                        ui.painter().add(egui::Shape::line(arc,
+                            Stroke::new(2.0, Color32::from_rgb(75, 139, 251))));
+                    }
+                    let progress = if self.video_rx.is_some() {
+                        self.video_progress.percent
+                            .filter(|value| value.is_finite())
+                            .map(|value| format!("Saving video · {:.0}%", value.clamp(0.0, 100.0)))
+                            .unwrap_or_else(|| "Saving video…".into())
+                    } else {
+                        self.downloads.iter().find(|item| item.active)
+                            .and_then(|item| item.bytes_per_second)
+                            .map(|speed| format!("Downloading · {}/s",
+                                downloads::format_bytes(speed)))
+                            .unwrap_or_else(|| "Downloading…".into())
+                    };
+                    ui.painter().text(strip.center(), Align2::CENTER_CENTER, progress,
+                        FontId::proportional(11.0), TEXT);
                 } else if self.prefs.pocket_mode == "Media" ||
                     (self.prefs.pocket_mode == "Auto" && self.media_app.is_some()) {
                     let airpods_badge = self.airpods.name.as_ref().map(|_|
