@@ -57,6 +57,9 @@ unsafe extern "C" {
     fn bookland_volume_hud_set(enabled: i32);
     fn bookland_airpods_watch_set(enabled: i32) -> i32;
     fn bookland_airpods_events_take() -> i32;
+    fn bookland_airpods_watch_status() -> i32;
+    fn bookland_airpods_authorization() -> i32;
+    fn bookland_airpods_request_access() -> i32;
     fn bookland_scroll_take(delta_x: *mut f64, delta_y: *mut f64) -> i32;
     fn bookland_haptic_feedback();
     fn nooklet_hover_monitor_set(enabled: i32, context: *mut std::ffi::c_void,
@@ -2671,6 +2674,12 @@ impl DeskApp {
                 self.weather = weather;
                 self.weather_rx = None;
             }
+        }
+        #[cfg(target_os = "macos")]
+        if self.airpods_events_attempted && !self.airpods_events_enabled
+            && unsafe { bookland_airpods_watch_status() != 0 } {
+            self.airpods_events_enabled = true;
+            self.airpods_refresh_pending = true;
         }
         #[cfg(target_os = "macos")]
         if self.airpods_events_enabled && unsafe { bookland_airpods_events_take() != 0 } {
@@ -7310,6 +7319,24 @@ impl DeskApp {
             )
             .on_hover_text("Audio sample access is unavailable in this recreation.");
         });
+        ui.add_space(12.0);
+        section_title(ui, "AIRPODS");
+        card().show(ui, |ui| {
+            #[cfg(target_os = "macos")]
+            unsafe {
+                if self.airpods_events_enabled {
+                    label(ui, "Live connection alerts enabled", 12.0, TEXT);
+                } else if bookland_airpods_authorization() == 2 {
+                    label(ui, "Bluetooth access is off in macOS Privacy settings. Bookland checks every 30 seconds.", 12.0, MUTED);
+                } else {
+                    label(ui, "Enable Bluetooth for immediate connection alerts. Without it, Bookland checks every 30 seconds.", 12.0, MUTED);
+                    if small_button(ui, "Enable live AirPods alerts").clicked()
+                        && bookland_airpods_request_access() == 0 {
+                        self.notify("Bluetooth access is unavailable");
+                    }
+                }
+            }
+        });
     }
     fn widget_settings(&mut self, ui: &mut egui::Ui) {
         match self.selected_widget {
@@ -7470,7 +7497,7 @@ impl Drop for DeskApp {
             if self.animation_clock_enabled {
                 nooklet_animation_clock_set(0, std::ptr::null_mut(), None);
             }
-            if self.airpods_events_enabled { bookland_airpods_watch_set(0); }
+            if self.airpods_events_attempted { bookland_airpods_watch_set(0); }
         }
         if self.prefs.clipboard_clear_on_quit && !self.preview_mode {
             let favorites = self.clipboard_favorites.clone();

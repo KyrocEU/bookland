@@ -6,6 +6,8 @@ static BOOL booklandAirPodsWatching;
 static IOBluetoothUserNotification *booklandConnectNotification;
 static NSMutableDictionary<NSString *, IOBluetoothUserNotification *> *booklandDisconnectNotifications;
 static atomic_bool booklandAirPodsChanged;
+static CBCentralManager *booklandPermissionManager;
+int bookland_airpods_watch_set(int enabled);
 
 @interface BooklandAirPodsObserver : NSObject
 - (void)deviceConnected:(IOBluetoothUserNotification *)notification
@@ -15,6 +17,51 @@ static atomic_bool booklandAirPodsChanged;
 @end
 
 static BooklandAirPodsObserver *booklandAirPodsObserver;
+
+@interface BooklandBluetoothPermissionObserver : NSObject <CBCentralManagerDelegate>
+@end
+static BooklandBluetoothPermissionObserver *booklandPermissionObserver;
+
+@implementation BooklandBluetoothPermissionObserver
+- (void)centralManagerDidUpdateState:(CBCentralManager *)central {
+    (void)central;
+    if (CBManager.authorization == CBManagerAuthorizationAllowedAlways) {
+        bookland_airpods_watch_set(1);
+        atomic_store(&booklandAirPodsChanged, true);
+    }
+    if (CBManager.authorization != CBManagerAuthorizationNotDetermined) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            booklandPermissionManager.delegate = nil;
+            booklandPermissionManager = nil;
+            booklandPermissionObserver = nil;
+        });
+    }
+}
+@end
+
+// 0: not decided, 1: authorized, 2: denied or restricted.
+int bookland_airpods_authorization(void) {
+    CBManagerAuthorization authorization = CBManager.authorization;
+    if (authorization == CBManagerAuthorizationAllowedAlways) return 1;
+    return authorization == CBManagerAuthorizationNotDetermined ? 0 : 2;
+}
+
+int bookland_airpods_request_access(void) {
+    int authorization = bookland_airpods_authorization();
+    if (authorization == 1) return bookland_airpods_watch_set(1);
+    if (authorization == 2) return 0;
+    if (!booklandPermissionManager) {
+        booklandPermissionObserver = [BooklandBluetoothPermissionObserver new];
+        booklandPermissionManager = [[CBCentralManager alloc]
+            initWithDelegate:booklandPermissionObserver queue:dispatch_get_main_queue()
+                    options:@{ CBCentralManagerOptionShowPowerAlertKey: @NO }];
+    }
+    return booklandPermissionManager != nil;
+}
+
+int bookland_airpods_watch_status(void) {
+    return booklandAirPodsWatching ? 1 : 0;
+}
 
 static void booklandWatchDisconnect(IOBluetoothDevice *device) {
     NSString *key = device.addressString;
@@ -54,6 +101,9 @@ static void booklandWatchDisconnect(IOBluetoothDevice *device) {
 int bookland_airpods_watch_set(int enabled) {
     if (!enabled) {
         booklandAirPodsWatching = NO;
+        booklandPermissionManager.delegate = nil;
+        booklandPermissionManager = nil;
+        booklandPermissionObserver = nil;
         [booklandConnectNotification unregister];
         booklandConnectNotification = nil;
         for (IOBluetoothUserNotification *notification in
