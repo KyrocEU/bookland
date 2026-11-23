@@ -19,6 +19,7 @@ static NSWindow *nookletProgressWindow;
 static CAShapeLayer *nookletProgressTrack;
 static CAShapeLayer *nookletProgressArc;
 static int nookletProgressStyle = -1;
+static CGFloat booklandProgressSpinAngle;
 static NSWindow *booklandActivityWindow;
 static NSGlassEffectView *booklandActivityGlass;
 static NSTextField *booklandActivityLabel;
@@ -543,12 +544,26 @@ static void booklandConfigureProgressRing(int usageStyle) {
     nookletProgressStyle = usageStyle;
 }
 
+static void booklandPauseProgressSpin(void) {
+    if (![nookletProgressArc animationForKey:@"bookland-progress-spin"]) return;
+    CALayer *presented = nookletProgressArc.presentationLayer;
+    if (presented) {
+        booklandProgressSpinAngle = atan2(presented.transform.m12,
+                                         presented.transform.m11);
+    }
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    [nookletProgressArc removeAnimationForKey:@"bookland-progress-spin"];
+    nookletProgressArc.transform = CATransform3DMakeRotation(
+        booklandProgressSpinAngle, 0, 0, 1);
+    [CATransaction commit];
+}
+
 void nooklet_progress_ring_set(int enabled, double x, double y, int usageStyle) {
     if (!nookletHostWindow) return;
     if (!enabled) {
+        booklandPauseProgressSpin();
         if (nookletProgressWindow.isVisible) [nookletProgressWindow orderOut:nil];
-        if ([nookletProgressArc animationForKey:@"bookland-progress-spin"])
-            [nookletProgressArc removeAnimationForKey:@"bookland-progress-spin"];
         return;
     }
     if (!nookletProgressWindow) {
@@ -578,12 +593,11 @@ void nooklet_progress_ring_set(int enabled, double x, double y, int usageStyle) 
     }
     booklandConfigureProgressRing(usageStyle != 0);
     if (nooklet_reduce_motion()) {
-        if ([nookletProgressArc animationForKey:@"bookland-progress-spin"])
-            [nookletProgressArc removeAnimationForKey:@"bookland-progress-spin"];
+        booklandPauseProgressSpin();
     } else if (![nookletProgressArc animationForKey:@"bookland-progress-spin"]) {
         CABasicAnimation *spin = [CABasicAnimation animationWithKeyPath:@"transform.rotation.z"];
-        spin.fromValue = @0;
-        spin.toValue = @(-2.0 * M_PI);
+        spin.fromValue = @(booklandProgressSpinAngle);
+        spin.toValue = @(booklandProgressSpinAngle - 2.0 * M_PI);
         spin.duration = 3.0;
         spin.repeatCount = HUGE_VALF;
         spin.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionLinear];
