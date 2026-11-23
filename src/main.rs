@@ -1563,9 +1563,20 @@ fn spring_step(position: f32, velocity: f32, target: f32,
             decay * (velocity - omega * weighted * dt))
     }
 }
+fn spring_frame_dt(elapsed: Duration, target_changed: bool) -> f32 {
+    let seconds = elapsed.as_secs_f32().min(1.0);
+    if target_changed {
+        // An input can arrive after the closed island's low-frequency idle
+        // redraw. That idle time is not elapsed animation time.
+        seconds.clamp(1.0 / 120.0, 1.0 / 60.0)
+    } else {
+        seconds
+    }
+}
 #[cfg(test)]
 mod hover_gate_tests {
-    use super::{hover_allowed_after_close, hover_close_guard, spring_step};
+    use std::time::Duration;
+    use super::{hover_allowed_after_close, hover_close_guard, spring_frame_dt, spring_step};
 
     #[test]
     fn explicit_close_requires_pointer_exit_before_hover_reopens() {
@@ -1595,6 +1606,16 @@ mod hover_gate_tests {
         assert!((once.1 - twice.1).abs() < 0.0001);
         let (over, _) = spring_step(0.0, 0.0, 1.0, omega, 0.82, 0.42);
         assert!(over > 1.0 && over < 1.02);
+    }
+
+    #[test]
+    fn first_spring_frame_does_not_include_closed_idle_time() {
+        let dt = spring_frame_dt(Duration::from_millis(350), true);
+        assert!((dt - 1.0 / 60.0).abs() < f32::EPSILON);
+        assert!((spring_frame_dt(Duration::ZERO, true) - 1.0 / 120.0).abs()
+            < f32::EPSILON);
+        assert!((spring_frame_dt(Duration::from_millis(30), false) - 0.03).abs()
+            < f32::EPSILON);
     }
 }
 #[cfg(test)]
@@ -7644,8 +7665,7 @@ impl eframe::App for DeskApp {
         self.animation_target_expanded = self.expanded;
         // Start moving on the first frame after a hover event. Zeroing this
         // frame added a full display interval to the apparent hover latency.
-        let elapsed = now.duration_since(self.last_frame).as_secs_f32().min(1.0);
-        let dt = if target_changed { elapsed.max(1.0 / 120.0) } else { elapsed };
+        let dt = spring_frame_dt(now.duration_since(self.last_frame), target_changed);
         self.last_frame = now;
         let expanded_before_panel = self.expanded;
         let target = if self.expanded { 1.0 } else { 0.0 };
