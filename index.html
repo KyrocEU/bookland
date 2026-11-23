@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#050a13">
+  <meta name="description" content="Bookland is an open-source macOS hover island for music, Calendar, everyday tools, and Codex activity.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Bookland — A living island for your Mac">
+  <meta property="og:description" content="Music, useful tools, and Codex activity at the top edge of your Mac. Explore the open-source preview.">
+  <meta property="og:image" content="https://bookland-mac-island.moshe99871.chatgpt.site/social-preview.png">
+  <meta property="og:url" content="https://bookland-mac-island.moshe99871.chatgpt.site/">
+  <link rel="icon" type="image/png" href="/bookland-icon.png">
+  <link rel="stylesheet" href="/style.css">
+  <script defer src="/main.js"></script>
+  <title>Bookland — A living island for your Mac</title>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <nav class="nav wrap" aria-label="Main navigation">
+      <a class="brand" href="#top" aria-label="Bookland home">
+        <img src="/bookland-icon.png" width="38" height="38" alt="">
+        <span>Bookland</span>
+      </a>
+      <div class="nav-links">
+        <a href="#experience">Experience</a>
+        <a href="#features">Features</a>
+        <a href="#open-source">Open source</a>
+      </div>
+      <a class="nav-github" href="https://github.com/KyrocEU/bookland" target="_blank" rel="noopener noreferrer">GitHub</a>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="hero wrap" id="top" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <div class="eyebrow"><span class="eyebrow-light" aria-hidden="true"></span> OPEN-SOURCE MACOS PREVIEW</div>
+        <h1 id="hero-title">A living island<br><span>for your Mac.</span></h1>
+        <p class="hero-lede">The space around your camera becomes a place for the things you reach for all day. Hover for music, your calendar, files, focus tools, and Codex activity. Move away, and your desktop is yours again.</p>
+        <div class="hero-actions">
+          <a class="button primary" href="https://github.com/KyrocEU/bookland" target="_blank" rel="noopener noreferrer">Explore on GitHub</a>
+          <a class="button secondary" href="#experience">See the island</a>
+        </div>
+        <p class="hero-note">Built for macOS 26 or later · Source available under MIT</p>
+      </div>
+      <div class="hero-art" aria-hidden="true">
+        <div class="hero-orbit orbit-one"></div>
+        <div class="hero-orbit orbit-two"></div>
+        <div class="hero-icon"><img src="/bookland-icon.png" width="250" height="250" alt=""></div>
+        <div class="hero-caption">MADE FOR THE TOP EDGE</div>
+      </div>
+    </section>
+
+    <section class="experience" id="experience" aria-labelledby="experience-title">
+      <div class="wrap">
+        <div class="section-intro">
+          <p class="kicker">THE EXPERIENCE</p>
+          <h2 id="experience-title">Right there when you need it.<br><span>Out of the way when you don’t.</span></h2>
+          <p>Bookland lives at the top edge of macOS. Hover to open its Liquid Glass panel, switch workspaces in the floating pill, or click to keep it open.</p>
+        </div>
+        <div class="demo" aria-label="Interactive preview of Bookland workspaces">
+          <div class="demo-screen">
+            <div class="screen-glow"></div>
+            <div class="screen-menubar"><span>Bookland</span><span>Mon 23 Nov · 10:24</span></div>
+            <div class="demo-island" id="demo-panel" role="tabpanel" aria-labelledby="tab-nook">
+              <div class="island-camera" aria-hidden="true"><span></span></div>
+              <div class="demo-pane is-active" data-pane="nook">
+                <div class="nook-art"><span class="record"></span></div>
+                <div class="nook-song"><span class="demo-overline">NOW PLAYING</span><strong>Studio Session</strong><span>Demo audio</span><div class="transport" aria-hidden="true">◀◀ <b>▶</b> ▶▶</div></div>
+                <div class="nook-pulse"><span>PULSE</span><b>28<small>%</small></b><i class="pulse-wave"></i><em>CPU</em></div>
+                <div class="nook-focus"><span>FOCUS</span><strong>10:00</strong><div class="focus-ticks" aria-hidden="true"></div><span class="focus-start">Start timer</span></div>
+                <div class="nook-task"><span>TO-DO</span><strong>Keep the day moving.</strong><small>Quick tasks, one glance away.</small></div>
+              </div>
+              <div class="demo-pane music-pane" data-pane="music" hidden>
+                <div class="music-art"><span class="music-orb"></span></div>
+                <div class="music-detail"><span class="demo-overline">MUSIC</span><strong>Your music, close by.</strong><p>Artwork, playback, a seek bar, volume and optional synced lyrics in one compact place.</p><div class="music-timeline"><span></span></div><div class="music-times"><span>1:28</span><span>3:42</span></div></div>
+              </div>
+              <div class="demo-pane calendar-pane" data-pane="calendar" hidden>
+                <div class="calendar-copy"><span class="demo-overline">CALENDAR</span><strong>Know what’s next.</strong><p>Event markers and a tidy day view for calendars connected through macOS.</p><div class="calendar-event"><span class="event-date">24</span><span><b>Design review</b><small>10:00 · Sample event</small></span></div></div>
+                <div class="mini-calendar" aria-label="Sample calendar for November">
+                  <span class="month-name">November</span><div class="weekdays"><span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span></div>
+                  <div class="days"><span>15</span><span>16</span><span>17</span><span>18</span><span>19<i></i></span><span>20</span><span>21</span><span>22</span><span>23</span><span class="selected">24<i></i></span><span>25</span><span>26<i></i></span><span>27</span><span>28</span></div>
+                </div>
+              </div>
+              <div class="demo-pane tray-pane" data-pane="tray" hidden>
+                <div class="tray-copy"><span class="demo-overline">TRAY & POCKET</span><strong>A little room for everything.</strong><p>Keep recent files close, drop something into Pocket, and hand it off when you’re ready.</p></div>
+                <div class="tray-files" aria-label="Sample files"><div><span>▧</span><b>Notes</b><small>.txt</small></div><div><span>▤</span><b>Sketch</b><small>.png</small></div><div><span>▥</span><b>Project</b><small>.pdf</small></div></div>
+              </div>
+              <div class="demo-pane agents-pane" data-pane="agents" hidden>
+                <div class="agents-copy"><span class="demo-overline">AGENTS / PROGRESS</span><strong>Codex is working.</strong><p>See local task progress without opening another window.</p><div class="agent-steps"><span>✓ Reading the project</span><span>✓ Preparing changes</span><span class="in-progress">◌ Checking the result</span></div></div>
+                <div class="agents-bubble"><span class="bubble-label">CONNECTED TURN</span><p>Approval requests from turns started through Bookland can appear here.</p></div>
+              </div>
+            </div>
+            <div class="demo-tabs" role="tablist" aria-label="Preview a Bookland workspace">
+              <button id="tab-nook" class="is-active" type="button" role="tab" aria-selected="true" aria-controls="demo-panel" data-tab="nook"><span class="tab-symbol">▱</span><span>Nook</span></button>
+              <button id="tab-music" type="button" role="tab" aria-selected="false" aria-controls="demo-panel" data-tab="music" tabindex="-1"><span class="tab-symbol">♫</span><span>Music</span></button>
+              <button id="tab-calendar" type="button" role="tab" aria-selected="false" aria-controls="demo-panel" data-tab="calendar" tabindex="-1"><span class="tab-symbol">▣</span><span>Calendar</span></button>
+              <button id="tab-tray" type="button" role="tab" aria-selected="false" aria-controls="demo-panel" data-tab="tray" tabindex="-1"><span class="tab-symbol">▤</span><span>Tray</span></button>
+              <button id="tab-agents" type="button" role="tab" aria-selected="false" aria-controls="demo-panel" data-tab="agents" tabindex="-1"><span class="tab-symbol">✦</span><span>Agents</span></button>
+            </div>
+            <p class="demo-disclaimer">Interactive illustration with sample content. The macOS app uses native system materials and your own data.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="features wrap" id="features" aria-labelledby="features-title">
+      <div class="section-intro narrow">
+        <p class="kicker">WHAT'S INSIDE</p>
+        <h2 id="features-title">One small place.<br><span>A lot of useful moments.</span></h2>
+      </div>
+      <div class="feature-grid">
+        <article class="feature feature-wide"><div class="feature-icon music-icon">♫</div><div><h3>Stay with the music.</h3><p>Control the current macOS media session, scrub the timeline, see artwork, and optionally follow synced lyrics. System playback also covers supported browser sessions.</p></div><div class="feature-visual visual-music" aria-hidden="true"><span></span><div class="visual-lines"><i></i><i></i><i></i></div></div></article>
+        <article class="feature"><div class="feature-icon calendar-icon">▣</div><h3>See the day clearly.</h3><p>Browse a month with event dots and filter by date. Bookland reads the calendars already connected to macOS, including Google calendars, with permission.</p><div class="feature-foot">Calendar stays on your Mac</div></article>
+        <article class="feature"><div class="feature-icon agents-icon">✦</div><h3>Keep an eye on Codex.</h3><p>Follow local Codex activity at a glance. Bookland-connected turns can surface questions and approval choices in the island.</p><div class="feature-foot">Connected turns only for approvals</div></article>
+        <article class="feature"><div class="feature-icon tray-icon">▤</div><h3>Files within reach.</h3><p>Tray and Pocket hold recent files for quick access, copying, conversion, and AirDrop handoff. Nothing needs a separate cloud account.</p></article>
+        <article class="feature"><div class="feature-icon focus-icon">◷</div><h3>Make room to focus.</h3><p>Keep a Pomodoro timer, to-dos, and a compact system pulse beside your media controls. Arrange the Nook widgets to suit your day.</p></article>
+      </div>
+    </section>
+
+    <section class="flow wrap" aria-labelledby="flow-title">
+      <div><p class="kicker">THE SMALL DETAILS</p><h2 id="flow-title">Made to feel at home<br><span>at the top of the screen.</span></h2></div>
+      <div class="flow-list"><div><p><strong>Hover and it opens.</strong> The closed strip wraps the camera cutout, then expands with a native animated silhouette.</p></div><div><p><strong>Choose what you need.</strong> A compact floating pill switches between music, Calendar, Tray, and Agents.</p></div><div><p><strong>Move on.</strong> The island closes after you leave. Click it when you want the panel to stay until Escape.</p></div></div>
+    </section>
+
+    <section class="source-section" id="open-source" aria-labelledby="source-title">
+      <div class="wrap source-layout">
+        <div><p class="kicker">OPEN SOURCE</p><h2 id="source-title">Built in the open.<br><span>Yours to explore.</span></h2><p>Bookland is an independent macOS project, written in Rust with native AppKit and Core Animation bridges. The code is MIT licensed. Read the source, build it, report what you find, or help shape what comes next.</p><div class="source-actions"><a class="button primary" href="https://github.com/KyrocEU/bookland" target="_blank" rel="noopener noreferrer">Visit the GitHub repository</a><a class="text-link" href="https://github.com/KyrocEU/bookland/issues" target="_blank" rel="noopener noreferrer">Share feedback</a></div></div>
+        <div class="terminal-card"><div class="terminal-top"><span></span><span></span><span></span><b>Build from source</b></div><pre><code><span>$</span> git clone https://github.com/KyrocEU/bookland.git
+<span>$</span> cd bookland
+<span>$</span> cargo test
+<span>$</span> sh package.sh
+<span>$</span> open Bookland.app</code></pre><button class="copy-command" type="button" aria-label="Copy build commands">Copy commands</button><p>Requires macOS 26+, Xcode Command Line Tools, CMake, and Rust. The local source build is ad hoc signed and is not notarized.</p></div>
+      </div>
+    </section>
+
+    <section class="faq wrap" aria-labelledby="faq-title"><div class="faq-heading"><p class="kicker">GOOD TO KNOW</p><h2 id="faq-title">A few honest answers.</h2></div><div class="faq-list">
+      <details><summary>Do I need a Mac with a camera notch?</summary><p>Bookland anchors at the top edge of the screen. Its camera-aware closed strip is designed for a MacBook notch. A synthetic notch on every external display is not part of this preview.</p></details>
+      <details><summary>Does it connect to Google Calendar?</summary><p>Yes. Add Google to macOS Calendar, enable Calendars for that account, then grant Bookland Calendar access and select the calendar in the app. Bookland does not store a Google password or OAuth token.</p></details>
+      <details><summary>Can I approve every Codex request from Bookland?</summary><p>Bookland can show decisions for turns started through its Codex connection. Requests from turns already running in the Codex desktop app do not currently flow into Bookland.</p></details>
+      <details><summary>Is this NotchNook?</summary><p>No. Bookland is an independent open-source project inspired by the idea of a Mac hover island. It is not affiliated with NotchNook or OpenAI, and it does not claim full feature parity.</p></details>
+    </div></section>
+  </main>
+
+  <footer class="footer"><div class="wrap footer-inner"><div class="footer-brand"><img src="/bookland-icon.png" width="34" height="34" alt=""><span>Bookland</span></div><p>A living island for your Mac.</p><div><a href="https://github.com/KyrocEU/bookland" target="_blank" rel="noopener noreferrer">GitHub</a><a href="https://github.com/KyrocEU/bookland/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a></div></div></footer>
+</body>
+</html>
