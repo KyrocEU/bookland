@@ -81,11 +81,38 @@ function startScrollMotion() {
   revealNodes.forEach((node) => observer.observe(node));
 
   const progress = document.querySelector('.scroll-progress span');
+  const chapter = document.querySelector('.scroll-chapter');
+  const chapterCount = chapter.querySelector('.scroll-chapter-count');
+  const chapterName = chapter.querySelector('.scroll-chapter-name');
+  const chapters = [
+    ['.hero', 'INTRO'], ['.experience', 'THE ISLAND'],
+    ['.screens-section', 'ON YOUR MAC'], ['.films-section', 'IN MOTION'],
+    ['.features', 'WHAT IT DOES'], ['.flow', 'THE DETAILS'],
+    ['.source-section', 'OPEN SOURCE'], ['.faq', 'GOOD TO KNOW']
+  ].map(([selector, name]) => ({ node: document.querySelector(selector), name }));
+  let chapterStarts = [];
+  let activeChapter = -1;
+  function measureChapters() {
+    chapterStarts = chapters.map(({ node }) => node.getBoundingClientRect().top + window.scrollY);
+    scheduleProgress();
+  }
   let scheduled = false;
   function updateProgress() {
     const distance = document.documentElement.scrollHeight - window.innerHeight;
     const fraction = distance > 0 ? Math.min(1, Math.max(0, window.scrollY / distance)) : 1;
     progress.style.transform = `scaleX(${fraction})`;
+    const readingLine = window.scrollY + window.innerHeight * .32;
+    let nextChapter = 0;
+    for (let index = 1; index < chapterStarts.length; index++) {
+      if (readingLine < chapterStarts[index]) break;
+      nextChapter = index;
+    }
+    if (nextChapter !== activeChapter) {
+      activeChapter = nextChapter;
+      chapterCount.textContent = `${String(nextChapter + 1).padStart(2, '0')} / 08`;
+      chapterName.textContent = chapters[nextChapter].name;
+    }
+    chapter.classList.toggle('is-visible', window.scrollY > 280 && fraction < .98);
     scheduled = false;
   }
   function scheduleProgress() {
@@ -94,14 +121,17 @@ function startScrollMotion() {
     window.requestAnimationFrame(updateProgress);
   }
   window.addEventListener('scroll', scheduleProgress, { passive: true });
-  window.addEventListener('resize', scheduleProgress, { passive: true });
-  scheduleProgress();
+  window.addEventListener('resize', measureChapters, { passive: true });
+  window.addEventListener('load', measureChapters, { once: true });
+  measureChapters();
 
   stopScrollMotion = () => {
     observer.disconnect();
     window.removeEventListener('scroll', scheduleProgress);
-    window.removeEventListener('resize', scheduleProgress);
+    window.removeEventListener('resize', measureChapters);
+    window.removeEventListener('load', measureChapters);
     document.documentElement.classList.remove('motion-enabled');
+    chapter.classList.remove('is-visible');
     revealNodes.forEach((node) => node.classList.remove('scroll-reveal', 'is-visible'));
   };
 }
