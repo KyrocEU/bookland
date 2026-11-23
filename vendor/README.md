@@ -14,6 +14,7 @@ The hash matched the `SHA2-256SUMS` file from the same official release. yt-dlp 
 [ungive/mediaremote-adapter](https://github.com/ungive/mediaremote-adapter),
 commit `65714990277cb4d0415ebaf7fff6be3229362b28` (BSD 3-Clause).
 `package.sh` builds its Objective-C framework locally with CMake and bundles
-the framework, Perl command script, and license. Bookland starts the adapter
-only for a user-initiated system media command; it keeps no helper process
-running while idle.
+the framework, Perl command script, and license. Bookland starts a short-lived
+adapter process to read the current macOS media session about every five
+seconds and for user-initiated playback commands. It keeps no helper process
+running between those requests.
