@@ -15,6 +15,12 @@ static void (*wakeCallback)(void *);
 static bool (*shakeSample)(double, bool);
 extern int nooklet_hover_pointer_screen(double *x, double *y);
 
+static void scheduleNextDragSample(NSTimeInterval delay) {
+    if (!monitorTimer.isValid) return;
+    monitorTimer.tolerance = delay * 0.1;
+    monitorTimer.fireDate = [NSDate dateWithTimeIntervalSinceNow:delay];
+}
+
 static bool pocketAnchorNearMouse(NSPoint mouse, double *outX, double *outY) {
     NSArray<NSScreen *> *screens = NSScreen.screens;
     NSScreen *screen = screens.firstObject;
@@ -79,16 +85,25 @@ static void sampleDrag(void) {
             if (shakeSample) shakeSample(0.0, false);
         }
         buttonWasDown = NO;
+        scheduleNextDragSample(0.10);
         return;
     }
     buttonWasDown = YES;
-    if (firedForDrag || drag.changeCount == idleDragChange ||
-        ![drag.types containsObject:NSPasteboardTypeFileURL] || !shakeSample) return;
+    if (firedForDrag) {
+        scheduleNextDragSample(0.10);
+        return;
+    }
+    if (drag.changeCount == idleDragChange ||
+        ![drag.types containsObject:NSPasteboardTypeFileURL] || !shakeSample) {
+        scheduleNextDragSample(0.05);
+        return;
+    }
     NSPoint mouse = NSEvent.mouseLocation;
     if (shakeSample(mouse.x, true)) {
         firedForDrag = YES;
         placePocketNearMouse(mouse);
     }
+    scheduleNextDragSample(firedForDrag ? 0.10 : 0.025);
 }
 
 void bookland_pocket_drag_monitor_set(bool enabled, void *context,
