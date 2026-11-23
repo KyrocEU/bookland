@@ -12,7 +12,7 @@ Bookland is a small macOS island for media, everyday tools, and optional Codex a
 
 ## Identity
 
-The open book and small diamond are the Bookland mark. Use `bookland-icon-premium.png` or `Bookland.icns` for app distribution. Use `bookland-mark.svg` for small interface marks. Use `bookland-wordmark-light.svg` on dark backgrounds and `bookland-wordmark-dark.svg` on light backgrounds. Keep clear space around the mark at least one quarter of its width. Do not use the OpenAI Blossom as the Bookland logo.
+The open book and small diamond are the Bookland mark. Use `bookland-icon-premium.png` or `Bookland.icns` for app distribution. The island uses a downscaled copy of that premium icon in its workspace menu, idle strip, and onboarding tour. Use `bookland-mark.svg` where a flat transparent mark is needed. Use `bookland-wordmark-light.svg` on dark backgrounds and `bookland-wordmark-dark.svg` on light backgrounds. Keep clear space around the mark at least one quarter of its width. Do not use the OpenAI Blossom as the Bookland logo.
 
 | Color | Hex | Use |
 | --- | --- | --- |
@@ -29,6 +29,7 @@ Use the macOS system typeface for app UI. Use a clean sans-serif wordmark in mar
 - `bookland-banner.svg`: editable, text-sharp alternate banner.
 - `social-preview.png`: 1280×640 repository social preview candidate.
 - `bookland-icon-premium.png`: app icon and press kit image.
+- [Public Bookland website](https://bookland-mac-island.moshe99871.chatgpt.site): product overview and GitHub entry point.
 
 Show real Bookland screenshots for feature demonstrations. The launch hero is a brand composition, not a screenshot of the app. Describe Codex approval controls as available for Bookland-connected turns; ordinary Codex desktop turns are not automatically mirrored into the island.
 

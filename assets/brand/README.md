@@ -9,7 +9,7 @@ Bookland's mark is an open book with a bright spine and a small diamond at its t
 | Ice | `#D7F3FF` |
 | Text | `#F4F8FF` |
 
-`bookland-icon.svg` is the editable base symbol and `bookland-icon-premium.png` is the refined app icon used by the signed build. `bookland-mark.svg` is the transparent menu mark. `bookland-banner.svg` and `bookland-launch-hero.png` are the GitHub and campaign banners. `Bookland.icns`, the remaining PNG versions, and `social-preview.png` are generated deliverables.
+`bookland-icon.svg` is the editable base symbol and `bookland-icon-premium.png` is the refined app icon used by the signed build and island interface. `bookland-mark.svg` is the transparent flat mark for other small uses. `bookland-banner.svg` and `bookland-launch-hero.png` are the GitHub and campaign banners. `Bookland.icns`, the remaining PNG versions, and `social-preview.png` are generated deliverables.
 
 The premium icon and launch hero were generated with the built-in image generation tool from the original Bookland vector icon. The icon prompt preserved the open-book shape, diamond, page colors, navy tile, and transparent corners while adding soft depth and highlights. The hero prompt carried that icon into a dark macOS launch image with the exact wordmark, tagline, and feature labels. The original vectors remain in this folder for reproducible small-scale interface graphics.
 

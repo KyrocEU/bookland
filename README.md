@@ -2,7 +2,9 @@
 
 # Bookland
 
-**A macOS hover island for media, everyday tools, and Codex.** Bookland lives at the top edge of the screen as a small black notch. Hover to open an adaptive Liquid Glass panel that closes after the pointer leaves, or click to keep it open until you press Escape. Choose a workspace in the floating pill. The interface is in English and can display right-to-left music metadata, including Hebrew. Its original open-book mark appears in the app icon and island menu.
+[Website](https://bookland-mac-island.moshe99871.chatgpt.site) · [Source repository](https://github.com/KyrocEU/bookland)
+
+**A macOS hover island for media, everyday tools, and Codex.** Bookland lives at the top edge of the screen as a small black notch. Hover to open an adaptive Liquid Glass panel that closes after the pointer leaves, or click to keep it open until you press Escape. Choose a workspace in the floating pill. The interface is in English and can display right-to-left music metadata, including Hebrew. Its premium open-book icon appears in the app and island menu, and on the idle strip.
 
 Bookland is an independent project inspired by the hover island in NotchNook. It is an early source release, not a copy of NotchNook's code or a claim that every original feature is complete. Bookland is not affiliated with NotchNook or OpenAI.
 

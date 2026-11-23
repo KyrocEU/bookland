@@ -1975,8 +1975,9 @@ fn paint_workspace_icon(
     match workspace {
         Workspace::Nook => {
             if let Some(mark) = bookland_mark {
-                p.image(mark.id(), egui::Rect::from_center_size(c, Vec2::splat(20.0)),
-                    egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)), color);
+                p.image(mark.id(), egui::Rect::from_center_size(c, Vec2::splat(27.0)),
+                    egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
+                    Color32::WHITE);
             } else {
                 p.add(egui::Shape::line(vec![
                     c + Vec2::new(-8.0, 7.0), c + Vec2::new(-8.0, -6.0),
@@ -6976,8 +6977,21 @@ impl DeskApp {
                             label(ui, &airpods, 11.0, TEXT);
                         }
                     });
-                } else if self.prefs.pocket_battery {
-                    label(ui, &format!("◉  {}", self.battery), 12.0, MUTED);
+                } else {
+                    let (strip, _) = ui.allocate_exact_size(
+                        Vec2::new(width - 30.0, height - 8.0), egui::Sense::hover());
+                    if let Some(mark) = &self.bookland_mark {
+                        ui.painter().image(mark.id(), egui::Rect::from_center_size(
+                            egui::pos2(strip.left() + 10.0, strip.center().y),
+                            Vec2::splat(22.0)),
+                            egui::Rect::from_min_max(egui::Pos2::ZERO,
+                                egui::pos2(1.0, 1.0)), Color32::WHITE);
+                    }
+                    if self.prefs.pocket_battery {
+                        ui.painter().text(strip.right_center() - Vec2::new(8.0, 0.0),
+                            Align2::RIGHT_CENTER, &self.battery,
+                            FontId::proportional(11.0), MUTED);
+                    }
                 }
             })
             .response
@@ -7982,7 +7996,7 @@ impl DeskApp {
                 ui.horizontal(|ui| {
                     if let Some(mark) = &mark {
                         ui.add(egui::Image::from_texture(mark)
-                            .fit_to_exact_size(Vec2::splat(28.0)));
+                            .fit_to_exact_size(Vec2::splat(30.0)));
                     }
                     ui.label(RichText::new("BOOKLAND").size(14.0).strong().color(TEXT));
                     ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
@@ -8000,9 +8014,9 @@ impl DeskApp {
                 ui.painter().rect_filled(island, 25.0, Color32::from_rgb(3, 5, 8));
                 if let Some(mark) = &mark {
                     ui.painter().image(mark.id(), egui::Rect::from_center_size(
-                        island.left_center() + Vec2::new(28.0, 0.0), Vec2::splat(26.0)),
+                        island.left_center() + Vec2::new(28.0, 0.0), Vec2::splat(30.0)),
                         egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
-                        accent);
+                        Color32::WHITE);
                 }
                 ui.painter().text(island.center(), Align2::CENTER_CENTER, page.eyebrow,
                     FontId::proportional(13.0), TEXT);
@@ -8167,11 +8181,13 @@ impl eframe::App for DeskApp {
         }
         if self.bookland_mark.is_none() {
             if let Ok(image) = image::load_from_memory(
-                include_bytes!("../assets/brand/bookland-mark.png")) {
-                let rgba = image.to_rgba8();
+                include_bytes!("../assets/brand/bookland-icon-premium.png")) {
+                // The distributed icon is large; the island needs only a
+                // small texture, so do not keep a 1254-pixel GPU copy.
+                let rgba = image.thumbnail(96, 96).to_rgba8();
                 let pixels = egui::ColorImage::from_rgba_unmultiplied(
                     [rgba.width() as usize, rgba.height() as usize], rgba.as_raw());
-                self.bookland_mark = Some(ctx.load_texture("bookland-mark", pixels,
+                self.bookland_mark = Some(ctx.load_texture("bookland-premium-island", pixels,
                     egui::TextureOptions::LINEAR));
             }
         }
