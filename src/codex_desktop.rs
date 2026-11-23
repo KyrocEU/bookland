@@ -350,7 +350,7 @@ pub fn recover_pending_async() {
 }
 
 fn execute(thread_id: String, prompt: String, allow_edits: bool,
-    sender: Sender<Event>, decisions: Receiver<Decision>) {
+    sender: Sender<Event>, decisions: Receiver<Decision>, repaint: eframe::egui::Context) {
     let result = (|| -> Result<(), String> {
         let binary = codex_bridge::binary()
             .ok_or("Codex CLI was not found on this Mac")?;
@@ -366,6 +366,7 @@ fn execute(thread_id: String, prompt: String, allow_edits: bool,
         let mut command = app_server_command(&binary, &home);
         let mut child = command.spawn().map_err(|error| error.to_string())?;
         let _ = sender.send(Event::Process(child.id()));
+        repaint.request_repaint();
         let mut settings_to_restore = None;
         let mut restore_record = None;
         let outcome = (|| -> Result<(), String> {
@@ -391,6 +392,7 @@ fn execute(thread_id: String, prompt: String, allow_edits: bool,
             restore_record = Some(persist_restore_at(&dir, &home, &original)?);
             settings_to_restore = Some(original);
             let _ = sender.send(Event::Progress("Sending to the selected Codex chat…".into()));
+            repaint.request_repaint();
             let (approval_policy, sandbox) = if allow_edits {
                 ("on-request", json!({"type": "workspaceWrite", "writableRoots": [],
                     "networkAccess": false, "excludeTmpdirEnvVar": false,
@@ -436,6 +438,7 @@ fn execute(thread_id: String, prompt: String, allow_edits: bool,
                     let input = user_input_display(&value)?;
                     let blocking = input.is_blocking;
                     let _ = sender.send(Event::Question(input));
+                    repaint.request_repaint();
                     let decision = if blocking { decisions.recv().unwrap_or(Decision::Deny) }
                         else {
                             let ms = params["autoResolutionMs"].as_u64()
@@ -449,6 +452,7 @@ fn execute(thread_id: String, prompt: String, allow_edits: bool,
                         _ => answer_unsupported(&mut stdin, &value["id"])?,
                     }
                     let _ = sender.send(Event::Progress("Waiting for Codex…".into()));
+                    repaint.request_repaint();
                     continue;
                 }
                 if let Some(method) = value["method"].as_str() {
@@ -457,9 +461,11 @@ fn execute(thread_id: String, prompt: String, allow_edits: bool,
                         if id.is_null() { return Err("Codex approval has no request ID".into()); }
                         if allow_edits {
                             let _ = sender.send(Event::Approval(approval_display(&value)));
+                            repaint.request_repaint();
                             let decision = decisions.recv().unwrap_or(Decision::Deny);
                             answer_approval(&mut stdin, &value, decision)?;
                             let _ = sender.send(Event::Progress("Waiting for Codex…".into()));
+                            repaint.request_repaint();
                         } else {
                             answer_approval(&mut stdin, &value, Decision::Deny)?;
                         }
@@ -472,6 +478,7 @@ fn execute(thread_id: String, prompt: String, allow_edits: bool,
                         if let Some(message) = params["item"]["text"].as_str() {
                             let _ = sender.send(Event::Message(
                                 message.chars().take(30_000).collect()));
+                            repaint.request_repaint();
                         }
                     }
                     Some("turn/completed") if params["turn"]["id"] == turn_id => {
@@ -499,13 +506,15 @@ fn execute(thread_id: String, prompt: String, allow_edits: bool,
         }
     })();
     let _ = sender.send(Event::Finished(result));
+    repaint.request_repaint();
 }
 
-pub fn run(thread_id: String, prompt: String, allow_edits: bool)
+pub fn run(thread_id: String, prompt: String, allow_edits: bool,
+    repaint: eframe::egui::Context)
     -> (Receiver<Event>, Sender<Decision>) {
     let (sender, receiver) = mpsc::channel();
     let (decisions_tx, decisions_rx) = mpsc::channel();
-    thread::spawn(move || execute(thread_id, prompt, allow_edits, sender, decisions_rx));
+    thread::spawn(move || execute(thread_id, prompt, allow_edits, sender, decisions_rx, repaint));
     (receiver, decisions_tx)
 }
 

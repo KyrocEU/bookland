@@ -1577,6 +1577,34 @@ mod hover_gate_tests {
         assert!(over > 1.0 && over < 1.02);
     }
 }
+#[cfg(test)]
+mod desktop_codex_request_tests {
+    use super::{codex_desktop, DeskApp, Workspace};
+    use std::sync::mpsc;
+
+    #[test]
+    fn pending_decision_opens_the_island_and_clears_after_answer() {
+        let mut app = DeskApp::new(None, 0, true, eframe::egui::Context::default());
+        app.workspace = Workspace::Music;
+        app.expanded = false;
+        app.opened_by_hover = true;
+        let (sender, receiver) = mpsc::channel();
+        app.desktop_codex_rx = Some(receiver);
+        sender.send(codex_desktop::Event::Approval(codex_desktop::Approval {
+            title: "Codex requests a command".into(),
+            detail: "Run a check".into(),
+        })).unwrap();
+        app.poll_desktop_codex();
+        assert!(app.expanded);
+        assert!(matches!(app.workspace, Workspace::Agents));
+        assert!(app.agent_chat_open && app.agent_chat_desktop);
+        assert!(!app.opened_by_hover);
+        assert!(app.desktop_codex_approval.is_some());
+        sender.send(codex_desktop::Event::Progress("Waiting for Codex…".into())).unwrap();
+        app.poll_desktop_codex();
+        assert!(app.desktop_codex_approval.is_none());
+    }
+}
 fn glass_card_icon(ui: &egui::Ui, rect: egui::Rect, kind: usize) {
     let p = ui.painter();
     let c = rect.center();
@@ -2393,9 +2421,25 @@ impl DeskApp {
         self.desktop_codex_question = None;
         self.desktop_codex_question_answers.clear();
         let (events, decisions) = codex_desktop::run(id, prompt,
-            self.desktop_codex_allow_edits);
+            self.desktop_codex_allow_edits, self.pocket_wake_context.as_ref().clone());
         self.desktop_codex_rx = Some(events);
         self.desktop_codex_decision_tx = Some(decisions);
+    }
+    fn show_desktop_codex_request(&mut self) {
+        if let Some(id) = &self.desktop_codex_thread_id {
+            if let Some(index) = self.agents.iter().position(|agent|
+                agent.source == "Codex" && desktop_codex_thread_id(&agent.path).as_ref() == Some(id)) {
+                self.selected_agent = index;
+            }
+        }
+        self.workspace = Workspace::Agents;
+        self.agent_usage_view = false;
+        self.agent_chat_desktop = true;
+        self.agent_chat_open = true;
+        self.expanded = true;
+        // Keep a decision open until the user answers or closes it.
+        self.opened_by_hover = false;
+        self.hover_blocked_until_exit = false;
     }
     fn poll_desktop_codex(&mut self) {
         let mut events = Vec::new();
@@ -2414,6 +2458,7 @@ impl DeskApp {
                 codex_desktop::Event::Process(pid) => self.desktop_codex_pid = Some(pid),
                 codex_desktop::Event::Progress(text) => {
                     if text == "Waiting for Codex…" {
+                        self.desktop_codex_approval = None;
                         self.desktop_codex_question = None;
                         self.desktop_codex_question_answers.clear();
                     }
@@ -2422,12 +2467,14 @@ impl DeskApp {
                 codex_desktop::Event::Approval(request) => {
                     self.desktop_codex_approval = Some(request);
                     self.desktop_codex_status = "Codex is waiting for your decision".into();
+                    self.show_desktop_codex_request();
                 }
                 codex_desktop::Event::Question(request) => {
                     self.desktop_codex_question_answers =
                         vec![String::new(); request.questions.len()];
                     self.desktop_codex_question = Some(request);
                     self.desktop_codex_status = "Codex has a question for you".into();
+                    self.show_desktop_codex_request();
                 }
                 codex_desktop::Event::Message(text) => {
                     self.desktop_codex_messages.push(CodexChatLine { role: "Codex".into(), text });
