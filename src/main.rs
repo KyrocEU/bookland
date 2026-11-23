@@ -64,7 +64,7 @@ unsafe extern "C" {
         subtitle: *const std::ffi::c_char, seconds: f64, panel_bottom: f64);
     fn bookland_result_card_position(panel_bottom: f64);
     fn bookland_conversion_card_hide();
-    fn bookland_volume_hud_set(enabled: i32);
+    fn bookland_volume_hud_set(enabled: i32, inline_mode: i32, closed_width: f64);
     fn bookland_system_volume_get() -> f32;
     fn bookland_system_volume_set(value: f32) -> i32;
     fn bookland_airpods_watch_set(enabled: i32) -> i32;
@@ -634,6 +634,7 @@ struct Preferences {
     pocket_shake: bool,
     notify_timer: bool,
     volume_hud: bool,
+    volume_hud_style: String,
     todos: Vec<TodoItem>,
 }
 impl Default for Preferences {
@@ -709,6 +710,7 @@ impl Default for Preferences {
             pocket_shake: true,
             notify_timer: true,
             volume_hud: true,
+            volume_hud_style: "Below the notch".into(),
             todos: Vec::new(),
         }
     }
@@ -838,6 +840,8 @@ struct DeskApp {
     hover_monitor_enabled: bool,
     animation_clock_enabled: bool,
     volume_hud_monitor_enabled: bool,
+    volume_hud_inline_enabled: bool,
+    volume_hud_closed_width: f32,
     airpods_events_attempted: bool,
     airpods_events_enabled: bool,
     pocket_wake_context: Box<egui::Context>,
@@ -2292,6 +2296,10 @@ impl DeskApp {
         if prefs.media_source == "Auto" {
             prefs.media_source = "System".into();
         }
+        if prefs.volume_hud_style != "Inline by the notch"
+            && prefs.volume_hud_style != "Below the notch" {
+            prefs.volume_hud_style = "Below the notch".into();
+        }
         // Migrate the first prototype's oversized default notch and sample to-dos.
         if ((prefs.open_height - 300.0).abs() < f32::EPSILON
             || (prefs.open_height - 190.0).abs() < f32::EPSILON)
@@ -2418,6 +2426,8 @@ impl DeskApp {
             hover_monitor_enabled: false,
             animation_clock_enabled: false,
             volume_hud_monitor_enabled: false,
+            volume_hud_inline_enabled: false,
+            volume_hud_closed_width: 0.0,
             airpods_events_attempted: false,
             airpods_events_enabled: false,
             pocket_wake_context: Box::new(repaint_context),
@@ -2657,9 +2667,16 @@ impl DeskApp {
                 }
                 let volume_hud_wanted = self.prefs.volume_hud
                     && self.screenshot.is_none() && !self.preview_mode;
-                if volume_hud_wanted != self.volume_hud_monitor_enabled {
-                    bookland_volume_hud_set(volume_hud_wanted as i32);
+                let volume_hud_inline = self.prefs.volume_hud_style == "Inline by the notch";
+                let closed_width = self.closed_dimensions().0;
+                if volume_hud_wanted != self.volume_hud_monitor_enabled
+                    || volume_hud_inline != self.volume_hud_inline_enabled
+                    || (closed_width - self.volume_hud_closed_width).abs() > 0.5 {
+                    bookland_volume_hud_set(volume_hud_wanted as i32,
+                        volume_hud_inline as i32, closed_width as f64);
                     self.volume_hud_monitor_enabled = volume_hud_wanted;
+                    self.volume_hud_inline_enabled = volume_hud_inline;
+                    self.volume_hud_closed_width = closed_width;
                 }
                 for (slot, area) in self.glass_rects.iter().enumerate() {
                     let morphing = slot == 0 && self.transition >= 0.82;
@@ -8066,7 +8083,20 @@ impl DeskApp {
                 card().show(ui, |ui| {
                     ui.checkbox(&mut self.prefs.notify_timer, "Notify when Pomodoro finishes");
                     ui.checkbox(&mut self.prefs.volume_hud,
-                        "Show a Liquid Glass volume card below the notch");
+                        "Show a Liquid Glass volume HUD");
+                    ui.add_enabled_ui(self.prefs.volume_hud, |ui| {
+                        ui.horizontal(|ui| {
+                            label(ui, "Volume placement", 12.0, MUTED);
+                            egui::ComboBox::from_id_salt("volume_hud_style")
+                                .selected_text(&self.prefs.volume_hud_style)
+                                .show_ui(ui, |ui| {
+                                    for choice in ["Below the notch", "Inline by the notch"] {
+                                        ui.selectable_value(&mut self.prefs.volume_hud_style,
+                                            choice.into(), choice);
+                                    }
+                                });
+                        });
+                    });
                     label(ui, "The running timer and current track can appear in the closed island. Configure that in Pocket.", 12.0, MUTED);
                 });
             }

@@ -13,7 +13,11 @@ static AudioObjectPropertyListenerBlock booklandDeviceListener;
 static AudioObjectPropertyListenerBlock booklandLevelListener;
 static NSWindow *booklandVolumeWindow;
 static NSGlassEffectView *booklandVolumeGlass;
+static NSView *booklandVolumeOverlay;
+static BOOL booklandVolumeInline;
+static CGFloat booklandVolumeClosedWidth = 255;
 enum { BooklandVolumeSegmentCount = 16 };
+static CALayer *booklandVolumeTrack[BooklandVolumeSegmentCount];
 static CALayer *booklandVolumeFill[BooklandVolumeSegmentCount];
 static CATextLayer *booklandVolumeText;
 static Float32 booklandLastVolume = -1;
@@ -149,6 +153,7 @@ static void booklandPrepareVolumeWindow(void) {
         track.cornerRadius = 2.5;
         track.backgroundColor = [NSColor colorWithCalibratedWhite:1 alpha:0.23].CGColor;
         [overlay.layer addSublayer:track];
+        booklandVolumeTrack[index] = track;
         CALayer *fill = [CALayer layer];
         fill.frame = segmentFrame;
         fill.cornerRadius = 2.5;
@@ -159,7 +164,30 @@ static void booklandPrepareVolumeWindow(void) {
     }
     booklandVolumeWindow = window;
     booklandVolumeGlass = glass;
+    booklandVolumeOverlay = overlay;
     booklandVolumeText = text;
+}
+
+static void booklandLayoutVolume(void) {
+    if (!booklandVolumeWindow) return;
+    CGFloat width = booklandVolumeInline ? 211 : 230;
+    CGFloat height = booklandVolumeInline ? 33 : 56;
+    [booklandVolumeWindow setContentSize:NSMakeSize(width, height)];
+    booklandVolumeGlass.frame = NSMakeRect(0, 0, width, height);
+    booklandVolumeGlass.cornerRadius = booklandVolumeInline ? 15 : 25;
+    booklandVolumeOverlay.frame = booklandVolumeGlass.bounds;
+    booklandVolumeText.frame = booklandVolumeInline
+        ? CGRectMake(10, 9, 58, 16) : CGRectMake(20, 28, 190, 18);
+    booklandVolumeText.fontSize = booklandVolumeInline ? 10 : 12;
+    for (int index = 0; index < BooklandVolumeSegmentCount; index++) {
+        CGRect frame = booklandVolumeInline
+            ? CGRectMake(70 + index * 8.2, 13, 5.5, 7)
+            : CGRectMake(21 + index * 11.75, 13, 8, 7);
+        booklandVolumeTrack[index].frame = frame;
+        booklandVolumeFill[index].frame = frame;
+        booklandVolumeTrack[index].cornerRadius = booklandVolumeInline ? 2 : 2.5;
+        booklandVolumeFill[index].cornerRadius = booklandVolumeInline ? 2 : 2.5;
+    }
 }
 
 static void booklandVolumePosition(void) {
@@ -172,8 +200,16 @@ static void booklandVolumePosition(void) {
     }
     if (!screen) screen = NSScreen.mainScreen;
     if (!screen || !booklandVolumeWindow) return;
-    CGFloat top = NSMaxY(screen.frame) - fmax(36, screen.safeAreaInsets.top) - 8;
-    [booklandVolumeWindow setFrameOrigin:NSMakePoint(NSMidX(screen.frame) - 115, top - 56)];
+    if (booklandVolumeInline) {
+        CGFloat x = NSMidX(screen.frame) - booklandVolumeClosedWidth * 0.5 - 217;
+        if (x < NSMinX(screen.frame) + 8) {
+            x = NSMidX(screen.frame) + booklandVolumeClosedWidth * 0.5 + 6;
+        }
+        [booklandVolumeWindow setFrameOrigin:NSMakePoint(x, NSMaxY(screen.frame) - 33)];
+    } else {
+        CGFloat top = NSMaxY(screen.frame) - fmax(36, screen.safeAreaInsets.top) - 8;
+        [booklandVolumeWindow setFrameOrigin:NSMakePoint(NSMidX(screen.frame) - 115, top - 56)];
+    }
 }
 
 static void booklandFadeVolume(CGFloat target, CFTimeInterval duration) {
@@ -195,6 +231,7 @@ static void booklandFadeVolume(CGFloat target, CFTimeInterval duration) {
 
 static void booklandShowVolume(Float32 volume, BOOL muted) {
     booklandPrepareVolumeWindow();
+    booklandLayoutVolume();
     booklandVolumePosition();
     Float32 visible = muted ? 0 : volume;
     int lit = (int)lroundf(visible * BooklandVolumeSegmentCount);
@@ -213,8 +250,10 @@ static void booklandShowVolume(Float32 volume, BOOL muted) {
         fill.opacity = target;
         [fill addAnimation:fade forKey:@"bookland-volume-tick"];
     }
-    booklandVolumeText.string = muted ? @"Volume · Muted" :
-        [NSString stringWithFormat:@"Volume · %d%%", (int)lroundf(volume * 100)];
+    booklandVolumeText.string = booklandVolumeInline
+        ? (muted ? @"MUTE" : [NSString stringWithFormat:@"VOL %d", (int)lroundf(volume * 100)])
+        : (muted ? @"Volume · Muted" :
+            [NSString stringWithFormat:@"Volume · %d%%", (int)lroundf(volume * 100)]);
     [CATransaction commit];
     if (!booklandVolumeWindow.isVisible) {
         booklandVolumeGlass.layer.opacity = 0;
@@ -293,9 +332,22 @@ static void booklandBindOutputDevice(void) {
     booklandLastMuted = booklandMuted();
 }
 
-void bookland_volume_hud_set(int enabled) {
+void bookland_volume_hud_set(int enabled, int inlineMode, double closedWidth) {
     BOOL desired = enabled != 0;
-    if (desired == booklandVolumeEnabled) return;
+    BOOL inlineDesired = inlineMode != 0;
+    CGFloat width = isfinite(closedWidth) ? fmax(120, fmin(700, closedWidth)) : 255;
+    if (desired == booklandVolumeEnabled && inlineDesired == booklandVolumeInline
+        && fabs(width - booklandVolumeClosedWidth) < 0.5) return;
+    BOOL listeningChanged = desired != booklandVolumeEnabled;
+    booklandVolumeInline = inlineDesired;
+    booklandVolumeClosedWidth = width;
+    if (!listeningChanged) {
+        if (booklandVolumeWindow.isVisible) {
+            booklandLayoutVolume();
+            booklandVolumePosition();
+        }
+        return;
+    }
     booklandVolumeEnabled = desired;
     if (desired) {
         booklandDeviceListener = ^(UInt32 count, const AudioObjectPropertyAddress *addresses) {
