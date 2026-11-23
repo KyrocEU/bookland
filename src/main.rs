@@ -6510,7 +6510,7 @@ impl DeskApp {
                 self.workspace = Workspace::Nook;
                 self.workspace_chosen_by_user = true;
                 self.expanded = true;
-                self.opened_by_hover = true;
+                self.opened_by_hover = false;
                 self.hover_blocked_until_exit = false;
                 self.last_hovered = Instant::now();
                 self.hover_opened_at = self.last_hovered;
@@ -6553,7 +6553,7 @@ impl DeskApp {
             } else { false };
             if !completion_clicked { self.choose_hover_workspace(); }
             self.expanded = true;
-            self.opened_by_hover = !completion_clicked;
+            self.opened_by_hover = false;
             self.hover_blocked_until_exit = false;
             self.last_hovered = Instant::now();
             self.hover_opened_at = self.last_hovered;
