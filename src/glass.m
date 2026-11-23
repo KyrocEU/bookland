@@ -87,6 +87,21 @@ void bookland_haptic_feedback(void) {
 
 static BooklandHoverObserver *booklandHoverObserver;
 
+static NSGlassEffectView *nookletPrepareGlassView(int slot) {
+    if (!nookletContainer || slot < 0 || slot >= 8) return nil;
+    NSGlassEffectView *view = nookletGlass[slot];
+    if (view) return view;
+    view = [[NSGlassEffectView alloc] initWithFrame:NSZeroRect];
+    view.autoresizingMask = NSViewNotSizable;
+    view.style = NSGlassEffectViewStyleRegular;
+    view.hidden = YES;
+    view.alphaValue = 0;
+    [nookletContainer addSubview:view positioned:NSWindowBelow
+                     relativeTo:nookletContainer.subviews.lastObject];
+    nookletGlass[slot] = view;
+    return view;
+}
+
 int nooklet_hover_pointer_screen(double *x, double *y) {
     // A tracking area can remain "inside" after a synthetic pointer jump
     // within the transparent host. Trust the event point only briefly; the
@@ -149,13 +164,21 @@ int nooklet_install_glass(void *rawView) {
     background.hasShadow = NO;
     background.ignoresMouseEvents = YES;
     background.collectionBehavior = window.collectionBehavior;
-    NSView *container = [[NSView alloc] initWithFrame:background.contentView.bounds];
+    NSGlassEffectContainerView *group = [[NSGlassEffectContainerView alloc]
+        initWithFrame:background.contentView.bounds];
+    group.wantsLayer = YES;
+    group.layer.backgroundColor = NSColor.clearColor.CGColor;
+    group.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    group.spacing = 0;
+    NSView *container = [[NSView alloc] initWithFrame:group.bounds];
     container.wantsLayer = YES;
     container.layer.backgroundColor = NSColor.clearColor.CGColor;
     container.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-    background.contentView = container;
+    group.contentView = container;
+    background.contentView = group;
     window.opaque = NO;
     window.backgroundColor = NSColor.clearColor;
+    window.hasShadow = NO;
     // The island is anchored to the screen edge. A drag across transparent
     // margins must not turn the borderless host into a movable window.
     window.movable = NO;
@@ -165,6 +188,9 @@ int nooklet_install_glass(void *rawView) {
     nookletContainer = container;
     nookletHostWindow = window;
     nookletGlassWindow = background;
+    // Prepare the island and its floating menu/card glass before the first
+    // hover. Hidden views do not render; this keeps allocation off the morph.
+    for (int slot = 0; slot <= 5; slot++) nookletPrepareGlassView(slot);
     if (!booklandScrollMonitor) {
         // NotchNook's local scroll monitor ignores momentum events. Keeping
         // those out of the gesture accumulator avoids a second media action
@@ -201,29 +227,27 @@ void nooklet_anchor_host_to_screen_top(int enabled) {
 }
 
 void nooklet_set_glass(int slot, double x, double y, double width, double height,
-                       double radius, double level, int enabled) {
+                       double radius, double level, double opacity, int enabled) {
     if (!nookletContainer || slot < 0 || slot >= 8) return;
     if (!NSEqualRects(nookletGlassWindow.frame, nookletHostWindow.frame)) {
         [nookletGlassWindow setFrame:nookletHostWindow.frame display:NO];
     }
     NSGlassEffectView *view = nookletGlass[slot];
     if (!enabled || width <= 0 || height <= 0) {
-        view.hidden = YES;
+        if (view) view.hidden = YES;
         return;
     }
-    if (!view) {
-        view = [[NSGlassEffectView alloc] initWithFrame:NSZeroRect];
-        view.autoresizingMask = NSViewNotSizable;
-        view.style = NSGlassEffectViewStyleRegular;
-        [nookletContainer addSubview:view positioned:NSWindowBelow relativeTo:nookletContainer.subviews.lastObject];
-        nookletGlass[slot] = view;
-    }
+    view = nookletPrepareGlassView(slot);
     double flippedY = nookletContainer.bounds.size.height - y - height;
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
     view.frame = NSMakeRect(x, flippedY, width, height);
     view.cornerRadius = radius;
-    view.tintColor = [NSColor colorWithCalibratedRed:0.055 green:0.063 blue:0.078
-                                              alpha:fmax(0.03, fmin(0.18, level * 0.14))];
+    view.tintColor = [NSColor colorWithCalibratedRed:0.46 green:0.50 blue:0.58
+                                              alpha:fmax(0.03, fmin(0.12, level * 0.08))];
+    view.alphaValue = fmax(0.0, fmin(1.0, opacity));
     view.hidden = NO;
+    [CATransaction commit];
 }
 
 void nooklet_progress_ring_set(int enabled, double x, double y) {

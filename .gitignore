@@ -4,6 +4,7 @@
 target/
 Bookland.app/
 vendor/yt-dlp_macos
+vendor/mediaremote-adapter/build/
 UNVERIFIED.md
 MECHANICS.md
 mechanics.json

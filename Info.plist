@@ -6,6 +6,7 @@
   <key>CFBundleDisplayName</key><string>Bookland</string>
   <key>CFBundleExecutable</key><string>bookland</string>
   <key>CFBundleIdentifier</key><string>local.bookland.app</string>
+  <key>CFBundleIconFile</key><string>Bookland.icns</string>
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
   <key>CFBundleName</key><string>Bookland</string>
   <key>CFBundlePackageType</key><string>APPL</string>

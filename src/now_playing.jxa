@@ -15,6 +15,13 @@ function run(arguments) {
       return $.MRMediaRemoteSendCommand(command, $.NSDictionary.dictionary)
         ? "sent" : "unavailable";
     }
+    if (arguments[0] === "seek") {
+      const seconds = Number(arguments[1]);
+      if (!isFinite(seconds) || seconds < 0 || seconds > 86400) return "unsupported";
+      ObjC.bindFunction("MRMediaRemoteSetElapsedTime", ["void", ["double"]]);
+      $.MRMediaRemoteSetElapsedTime(seconds);
+      return "sent";
+    }
     const request = $.NSClassFromString("MRNowPlayingRequest");
     if (!request || request.isNil()) return "{}";
     const item = request.localNowPlayingItem;

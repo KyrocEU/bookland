@@ -24,3 +24,10 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+System playback commands use MediaRemote Adapter by Jonas van den Berg and
+contributors, BSD 3-Clause, from
+https://github.com/ungive/mediaremote-adapter (commit
+`65714990277cb4d0415ebaf7fff6be3229362b28`). Its full license is in
+`vendor/mediaremote-adapter/LICENSE` and bundled as
+`Contents/Resources/MediaRemoteAdapter-LICENSE`.

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="150" viewBox="0 0 700 150" role="img" aria-label="Bookland logo for light backgrounds">
+  <g transform="translate(8 8) scale(.52)">
+    <path d="M128 68 C98 47 66 43 31 53 Q22 55 22 65 V194 Q22 203 32 200 C73 191 102 198 128 220 Z" fill="#111D2D"/>
+    <path d="M128 68 C158 47 190 43 225 53 Q234 55 234 65 V194 Q234 203 224 200 C183 191 154 198 128 220 Z" fill="#5B95E9"/>
+    <path d="M128 68 V220" fill="none" stroke="#3A79CC" stroke-width="7" stroke-linecap="round"/>
+    <path d="M128 51 L136 60 L128 69 L120 60 Z" fill="#4F91E6"/>
+  </g>
+  <text x="164" y="109" fill="#111D2D" font-family="-apple-system, BlinkMacSystemFont, Helvetica Neue, Arial, sans-serif" font-size="88" font-weight="700" letter-spacing="-3">Bookland</text>
+</svg>

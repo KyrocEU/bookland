@@ -19,6 +19,7 @@ use downloads::DownloadEntry;
 mod island_gesture;
 use island_gesture::{Action as IslandGestureAction, IslandGesture};
 mod lyrics;
+mod media_remote_adapter;
 mod music_airplay;
 use music_airplay::AirPlayDevice;
 mod pocket;
@@ -59,7 +60,7 @@ unsafe extern "C" {
         wake: Option<extern "C" fn(*mut std::ffi::c_void)>);
     fn nooklet_set_glass(
         slot: i32, x: f64, y: f64, width: f64, height: f64,
-        radius: f64, level: f64, enabled: i32,
+        radius: f64, level: f64, opacity: f64, enabled: i32,
     );
     fn nooklet_calendar_status() -> i32;
     fn nooklet_calendar_connect();
@@ -540,6 +541,7 @@ impl Default for Preferences {
 struct DeskApp {
     expanded: bool,
     workspace: Workspace,
+    workspace_chosen_by_user: bool,
     settings_open: bool,
     settings_section: String,
     selected_widget: Widget,
@@ -676,8 +678,8 @@ struct DeskApp {
     media_duration: f32,
     media_playing: bool,
     media_rx: Option<std::sync::mpsc::Receiver<MediaSnapshot>>,
-    media_action_tx: std::sync::mpsc::Sender<bool>,
-    media_action_rx: std::sync::mpsc::Receiver<bool>,
+    media_action_tx: std::sync::mpsc::Sender<(bool, Option<bool>)>,
+    media_action_rx: std::sync::mpsc::Receiver<(bool, Option<bool>)>,
     media_actions_pending: usize,
     last_media_request: Instant,
     airplay_open: bool,
@@ -693,6 +695,8 @@ struct DeskApp {
     artwork_rx: Option<std::sync::mpsc::Receiver<Result<Option<Vec<u8>>, String>>>,
     artwork_texture: Option<egui::TextureHandle>,
     codex_logo: Option<egui::TextureHandle>,
+    bookland_mark: Option<egui::TextureHandle>,
+    notch_shoulders: Option<[egui::TextureHandle; 2]>,
     lyrics_for: Option<(String, String)>,
     lyrics_rx: Option<std::sync::mpsc::Receiver<Result<Vec<LyricLine>, String>>>,
     lyrics_lines: Vec<LyricLine>,
@@ -1015,6 +1019,25 @@ fn system_media_script(mode: &[&str]) -> Option<String> {
     args.extend_from_slice(mode);
     osascript_args_with_timeout(&args, Duration::from_secs(3))
 }
+fn system_media_control(action: &str) -> bool {
+    if let Some(seconds) = action.strip_prefix("set player position to ")
+        .and_then(|value| value.parse::<f64>().ok())
+        .filter(|value| value.is_finite() && (0.0..=86400.0).contains(value)) {
+        return media_remote_adapter::seek(seconds)
+            || system_media_script(&["seek", &seconds.to_string()]).as_deref() == Some("sent");
+    }
+    let (command, name) = match action {
+        "play" => (0, "play"),
+        "pause" => (1, "pause"),
+        "next track" => (4, "next"),
+        "previous track" => (5, "previous"),
+        "shuffle" => (6, "shuffle"),
+        _ => return false,
+    };
+    media_remote_adapter::send(command)
+        || (action != "shuffle"
+            && system_media_script(&["control", name]).as_deref() == Some("sent"))
+}
 fn system_artwork() -> Result<Option<Vec<u8>>, String> {
     let encoded = system_media_script(&["artwork"])
         .ok_or_else(|| "System artwork query timed out".to_owned())?;
@@ -1045,11 +1068,17 @@ struct MediaSnapshot {
     playing: bool,
 }
 fn system_media() -> Option<MediaSnapshot> {
-    let raw = system_media_script(&[])?;
-    let value: serde_json::Value = serde_json::from_str(&raw).ok()?;
-    let title = value["Title"].as_str()?.trim();
+    let value = media_remote_adapter::now_playing().or_else(|| {
+        serde_json::from_str(&system_media_script(&[])?).ok()
+    })?;
+    system_media_from_value(&value)
+}
+fn system_media_from_value(value: &serde_json::Value) -> Option<MediaSnapshot> {
+    let title = value["title"].as_str().or_else(|| value["Title"].as_str())?.trim();
     if title.is_empty() { return None; }
-    let bundle = value["bundle"].as_str().unwrap_or("");
+    let bundle = value["parentApplicationBundleIdentifier"].as_str()
+        .or_else(|| value["bundleIdentifier"].as_str())
+        .or_else(|| value["bundle"].as_str()).unwrap_or("");
     let app = match bundle {
         "com.apple.Music" => "Music",
         "com.spotify.client" => "Spotify",
@@ -1063,11 +1092,46 @@ fn system_media() -> Option<MediaSnapshot> {
     Some(MediaSnapshot {
         app: Some(app.into()),
         title: title.into(),
-        artist: value["Artist"].as_str().unwrap_or("").into(),
-        position: value["ElapsedTime"].as_f64().unwrap_or(0.0).max(0.0) as f32,
-        duration: value["Duration"].as_f64().unwrap_or(0.0).max(0.0) as f32,
+        artist: value["artist"].as_str().or_else(|| value["Artist"].as_str())
+            .unwrap_or("").into(),
+        position: value["elapsedTimeNow"].as_f64()
+            .or_else(|| value["elapsedTime"].as_f64())
+            .or_else(|| value["ElapsedTime"].as_f64())
+            .unwrap_or(0.0).max(0.0) as f32,
+        duration: value["duration"].as_f64().or_else(|| value["Duration"].as_f64())
+            .unwrap_or(0.0).max(0.0) as f32,
         playing: value["playing"].as_bool().unwrap_or(false),
     })
+}
+#[cfg(test)]
+mod system_media_tests {
+    use super::system_media_from_value;
+
+    #[test]
+    fn adapter_snapshot_uses_parent_player_and_live_elapsed_time() {
+        let input = serde_json::json!({
+            "title": "A track", "artist": "An artist", "bundleIdentifier": "com.apple.WebKit.GPU",
+            "parentApplicationBundleIdentifier": "com.apple.Safari", "elapsedTime": 10.0,
+            "elapsedTimeNow": 12.5, "duration": 90.0, "playing": true
+        });
+        let snapshot = system_media_from_value(&input).unwrap();
+        assert_eq!(snapshot.app.as_deref(), Some("Safari"));
+        assert_eq!(snapshot.position, 12.5);
+        assert_eq!(snapshot.duration, 90.0);
+        assert!(snapshot.playing);
+    }
+
+    #[test]
+    fn legacy_jxa_snapshot_remains_usable() {
+        let input = serde_json::json!({
+            "Title": "Another track", "Artist": "Another artist", "bundle": "com.google.Chrome",
+            "ElapsedTime": 30.0, "Duration": 120.0, "playing": false
+        });
+        let snapshot = system_media_from_value(&input).unwrap();
+        assert_eq!(snapshot.app.as_deref(), Some("Google Chrome"));
+        assert_eq!(snapshot.title, "Another track");
+        assert_eq!(snapshot.position, 30.0);
+    }
 }
 fn read_media(source: &str) -> MediaSnapshot {
     if (source == "System" || source == "Auto") && cfg!(target_os = "macos") {
@@ -1200,17 +1264,68 @@ fn label(ui: &mut egui::Ui, text: &str, size: f32, color: Color32) {
 }
 // egui 0.32 lays glyphs left to right, even when the installed font contains
 // Hebrew. Reorder dynamic music metadata into visual order before painting it.
+fn mirrored_bidi_punctuation(ch: char) -> char {
+    match ch {
+        '(' => ')', ')' => '(', '[' => ']', ']' => '[',
+        '{' => '}', '}' => '{', '<' => '>', '>' => '<',
+        '«' => '»', '»' => '«', '‹' => '›', '›' => '‹',
+        _ => ch,
+    }
+}
 fn music_visual_text(text: &str) -> (String, bool) {
     let bidi = unicode_bidi::BidiInfo::new(text, None);
     let Some(paragraph) = bidi.paragraphs.first() else {
         return (text.to_owned(), false);
     };
-    (bidi.reorder_line(paragraph, paragraph.range.clone()).into_owned(),
-        paragraph.level.is_rtl())
+    let (levels, runs) = bidi.visual_runs(paragraph, paragraph.range.clone());
+    let mut visual = String::with_capacity(text.len());
+    for run in runs {
+        if levels[run.start].is_rtl() {
+            visual.extend(text[run].chars().rev().map(mirrored_bidi_punctuation));
+        } else {
+            visual.push_str(&text[run]);
+        }
+    }
+    (visual, paragraph.level.is_rtl())
+}
+fn complete_music_prefix(prefix: &str) -> &str {
+    let last_open = prefix.rfind('(');
+    let last_close = prefix.rfind(')');
+    let complete = match (last_open, last_close) {
+        (Some(open), Some(close)) if open > close => &prefix[..open],
+        (Some(open), None) => &prefix[..open],
+        _ => prefix,
+    };
+    complete.trim_end()
+}
+fn truncate_rtl_visual(text: &str, max_width: f32, mut width: impl FnMut(&str) -> f32) -> String {
+    let full = music_visual_text(text).0;
+    if width(&full) <= max_width { return full; }
+    let chars: Vec<char> = text.chars().collect();
+    let mut low = 0;
+    let mut high = chars.len();
+    while low < high {
+        let middle = (low + high + 1) / 2;
+        let prefix: String = chars[..middle].iter().collect();
+        let candidate = music_visual_text(&format!("{}…", complete_music_prefix(&prefix))).0;
+        if width(&candidate) <= max_width { low = middle; }
+        else { high = middle - 1; }
+    }
+    if low == 0 { return "…".into(); }
+    let prefix: String = chars[..low].iter().collect();
+    music_visual_text(&format!("{}…", complete_music_prefix(&prefix))).0
 }
 fn music_text(ui: &mut egui::Ui, text: &str, size: f32, color: Color32,
               strong: bool, truncate: bool) {
-    let (visual, rtl) = music_visual_text(text);
+    let (mut visual, rtl) = music_visual_text(text);
+    if rtl && truncate {
+        let available = (ui.available_width() - 8.0).max(0.0);
+        let font = FontId::proportional(size);
+        visual = truncate_rtl_visual(text, available, |candidate| {
+            ui.ctx().fonts(|fonts| fonts.layout_no_wrap(
+                candidate.to_owned(), font.clone(), color).size().x)
+        });
+    }
     let mut rich = RichText::new(visual).size(size).color(color);
     if strong { rich = rich.strong(); }
     let mut widget = egui::Label::new(rich)
@@ -1226,7 +1341,7 @@ fn music_text(ui: &mut egui::Ui, text: &str, size: f32, color: Color32,
 }
 #[cfg(test)]
 mod music_bidi_tests {
-    use super::music_visual_text;
+    use super::{music_visual_text, truncate_rtl_visual};
 
     #[test]
     fn hebrew_music_text_is_in_visual_order() {
@@ -1239,6 +1354,33 @@ mod music_bidi_tests {
         let (visual, rtl) = music_visual_text("שלום ABC 123");
         assert!(rtl);
         assert!(visual.contains("ABC 123"));
+    }
+
+    #[test]
+    fn hebrew_title_mirrors_english_credit_parentheses() {
+        let (visual, rtl) = music_visual_text(
+            "שירז אברהם - מה עשיתי לך ילד (Prod. By Moshe Saboni & Nadav)");
+        assert!(rtl);
+        assert!(visual.starts_with("(Prod. By Moshe Saboni & Nadav)"), "{visual}");
+        assert!(!visual.contains(")Prod."));
+    }
+
+    #[test]
+    fn narrow_rtl_title_keeps_logical_beginning() {
+        let text = "שירז אברהם - מה עשיתי לך ילד (Prod. By Moshe Saboni & Nadav)";
+        let visual = truncate_rtl_visual(text, 24.0, |candidate| candidate.chars().count() as f32);
+        assert!(visual.starts_with('…'), "{visual}");
+        assert!(visual.ends_with("םהרבא זריש"), "{visual}");
+        assert!(!visual.contains("Prod."));
+    }
+
+    #[test]
+    fn truncated_credit_does_not_leave_open_parenthesis() {
+        let text = "שירז אברהם - מה עשיתי לך ילד (Prod. By Moshe Saboni & Nadav)";
+        let visual = truncate_rtl_visual(text, 45.0, |candidate| candidate.chars().count() as f32);
+        assert!(visual.starts_with('…'), "{visual}");
+        assert!(!visual.contains("Prod."), "{visual}");
+        assert!(!visual.contains('(') && !visual.contains(')'), "{visual}");
     }
 }
 #[cfg(target_os = "macos")]
@@ -1310,12 +1452,19 @@ fn glass_sheen(rect: egui::Rect, opacity: u8) -> egui::Shape {
     }
     egui::Shape::mesh(mesh)
 }
+fn glass_surface_fill() -> Color32 {
+    // Let NSGlassEffectView sample the desktop behind the island. A painted
+    // gray surface made the panel look white on every wallpaper.
+    Color32::from_rgba_unmultiplied(12, 16, 23, 24)
+}
 fn island_upper_shade(rect: egui::Rect) -> egui::Shape {
     let mut mesh = egui::Mesh::default();
-    // The compact Nook in the live reference leaves the menu-bar region
-    // opaque, then reveals its light glass surface by the lower third.
-    let rows = [(0.0, 255), (0.30, 255), (0.38, 205), (0.45, 150),
-        (0.52, 100), (0.60, 40), (0.68, 0), (1.0, 0)];
+    // Keep only the camera band opaque. The rest remains actual system glass,
+    // so its color and specular treatment follow the background.
+    let band = (33.0 / rect.height().max(1.0)).min(1.0);
+    let shoulder = (47.0 / rect.height().max(1.0)).min(1.0);
+    let clear = (69.0 / rect.height().max(1.0)).min(1.0);
+    let rows = [(0.0, 255), (band, 255), (shoulder, 120), (clear, 0), (1.0, 0)];
     for (fraction, alpha) in rows {
         let color = Color32::from_rgba_unmultiplied(0, 0, 0, alpha);
         let y = rect.top() + rect.height() * fraction;
@@ -1360,24 +1509,7 @@ fn paint_agent_usage_icon(painter: &egui::Painter, center: egui::Pos2,
     }
 }
 fn agents_upper_shade(rect: egui::Rect) -> egui::Shape {
-    let mut mesh = egui::Mesh::default();
-    // Measured against the live Agents capture: the content stays black
-    // through its header, then reaches the light glass band near the bottom.
-    let rows = [(0.0, 255), (0.47, 255), (0.52, 235), (0.57, 195),
-        (0.62, 150), (0.67, 120), (0.72, 75), (0.79, 35),
-        (0.85, 0), (1.0, 0)];
-    for (fraction, alpha) in rows {
-        let color = Color32::from_rgba_unmultiplied(0, 0, 0, alpha);
-        let y = rect.top() + rect.height() * fraction;
-        mesh.colored_vertex(egui::pos2(rect.left(), y), color);
-        mesh.colored_vertex(egui::pos2(rect.right(), y), color);
-    }
-    for row in 0..rows.len() - 1 {
-        let left = (row * 2) as u32;
-        mesh.add_triangle(left, left + 1, left + 2);
-        mesh.add_triangle(left + 1, left + 3, left + 2);
-    }
-    egui::Shape::mesh(mesh)
+    island_upper_shade(rect)
 }
 fn hover_allowed_after_close(blocked_until_exit: &mut bool, physically_hovered: bool) -> bool {
     if !physically_hovered {
@@ -1436,12 +1568,14 @@ mod hover_gate_tests {
 
     #[test]
     fn spring_position_is_stable_across_frame_intervals() {
-        let omega = std::f32::consts::TAU / 0.47;
-        let once = spring_step(0.0, 0.0, 1.0, omega, 0.88, 0.08);
-        let first = spring_step(0.0, 0.0, 1.0, omega, 0.88, 0.04);
-        let twice = spring_step(first.0, first.1, 1.0, omega, 0.88, 0.04);
+        let omega = std::f32::consts::TAU / 0.5;
+        let once = spring_step(0.0, 0.0, 1.0, omega, 0.82, 0.08);
+        let first = spring_step(0.0, 0.0, 1.0, omega, 0.82, 0.04);
+        let twice = spring_step(first.0, first.1, 1.0, omega, 0.82, 0.04);
         assert!((once.0 - twice.0).abs() < 0.0001);
         assert!((once.1 - twice.1).abs() < 0.0001);
+        let (over, _) = spring_step(0.0, 0.0, 1.0, omega, 0.82, 0.42);
+        assert!(over > 1.0 && over < 1.02);
     }
 }
 fn glass_card_icon(ui: &egui::Ui, rect: egui::Rect, kind: usize) {
@@ -1562,6 +1696,7 @@ fn paint_workspace_icon(
     ui: &egui::Ui,
     rect: egui::Rect,
     workspace: Workspace,
+    bookland_mark: Option<&egui::TextureHandle>,
     color: Color32,
     dots: bool,
 ) {
@@ -1582,12 +1717,16 @@ fn paint_workspace_icon(
     let s = Stroke::new(1.6, color);
     match workspace {
         Workspace::Nook => {
-            p.add(egui::Shape::line(vec![
-                c + Vec2::new(-8.0, -7.0), c + Vec2::new(5.0, -5.0),
-                c + Vec2::new(0.0, 3.0), c + Vec2::new(-8.0, -7.0),
-            ], s));
-            p.line_segment([c + Vec2::new(0.0, 3.0), c + Vec2::new(7.0, 7.0)], s);
-            p.line_segment([c + Vec2::new(-8.0, 8.0), c + Vec2::new(8.0, 8.0)], s);
+            if let Some(mark) = bookland_mark {
+                p.image(mark.id(), egui::Rect::from_center_size(c, Vec2::splat(20.0)),
+                    egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)), color);
+            } else {
+                p.add(egui::Shape::line(vec![
+                    c + Vec2::new(-8.0, 7.0), c + Vec2::new(-8.0, -6.0),
+                    c, c + Vec2::new(8.0, -6.0), c + Vec2::new(8.0, 7.0),
+                ], s));
+                p.line_segment([c, c + Vec2::new(0.0, 7.0)], s);
+            }
         }
         Workspace::Music => {
             p.add(egui::Shape::convex_polygon(vec![
@@ -1660,6 +1799,18 @@ fn section_title(ui: &mut egui::Ui, text: &str) {
 }
 
 impl DeskApp {
+    fn choose_hover_workspace(&mut self) {
+        if self.workspace_chosen_by_user || !self.prefs.agent_monitor
+            || self.workspace != Workspace::Nook { return; }
+        if let Some(index) = self.agents.iter().position(|agent|
+            agent.source == "Codex" && agent.status == "Working")
+            .or_else(|| self.agents.iter().position(|agent| agent.source == "Codex")) {
+            self.workspace = Workspace::Agents;
+            self.selected_agent = index;
+            self.agent_usage_view = false;
+            self.agent_chat_open = false;
+        }
+    }
     fn closed_dimensions(&self) -> (f32, f32) {
         let mut width = self.prefs.closed_width.clamp(180.0, 400.0);
         let mut height = self.prefs.closed_height.clamp(30.0, 70.0);
@@ -1760,6 +1911,7 @@ impl DeskApp {
         Self {
             expanded,
             workspace: Workspace::Nook,
+            workspace_chosen_by_user: false,
             settings_open: false,
             settings_section: "General".into(),
             selected_widget: Widget::MediaPlayer,
@@ -1914,6 +2066,8 @@ impl DeskApp {
             artwork_rx: None,
             artwork_texture: None,
             codex_logo: None,
+            bookland_mark: None,
+            notch_shoulders: None,
             lyrics_for: None,
             lyrics_rx: None,
             lyrics_lines: Vec::new(),
@@ -1976,7 +2130,7 @@ impl DeskApp {
                     self.hover_monitor_enabled = hover_wanted;
                 }
                 for (slot, area) in self.glass_rects.iter().enumerate() {
-                    let morphing = slot == 0 && self.transition > 0.15;
+                    let morphing = slot == 0 && self.transition >= 0.82;
                     let enabled = self.screenshot.is_none()
                         && self.prefs.style == "Glass"
                         && (self.transition >= 0.96 || morphing);
@@ -1986,10 +2140,13 @@ impl DeskApp {
                             rect.width() as f64, rect.height() as f64,
                             if slot == 0 { f64::from(26.0_f32.min(rect.height() * 0.5)) }
                                 else { 23.0 },
-                            self.prefs.glass_level as f64, 1,
+                            self.prefs.glass_level as f64,
+                            if morphing { f64::from(((self.transition - 0.82) / 0.14)
+                                .clamp(0.0, 1.0)) } else { 1.0 }, 1,
                         );
                     } else {
-                        nooklet_set_glass(slot as i32, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0);
+                        nooklet_set_glass(slot as i32, 0.0, 0.0, 0.0, 0.0,
+                            0.0, 0.0, 0.0, 0);
                     }
                 }
             }
@@ -2667,9 +2824,15 @@ impl DeskApp {
             self.last_media_request = Instant::now();
             std::thread::spawn(move || { let _ = sender.send(read_media(&source)); });
         }
-        while let Ok(success) = self.media_action_rx.try_recv() {
+        while let Ok((success, previous_playing)) = self.media_action_rx.try_recv() {
             self.media_actions_pending = self.media_actions_pending.saturating_sub(1);
-            if !success { self.notify("Playback control was unavailable"); }
+            if !success {
+                if let Some(previous_playing) = previous_playing {
+                    self.media_playing = previous_playing;
+                }
+                self.notify("Playback control was unavailable");
+            }
+            self.media_rx = None;
             self.last_media_request = Instant::now() - Duration::from_secs(6);
         }
         if let Some(result) = self.artwork_rx.as_ref().and_then(|receiver| receiver.try_recv().ok()) {
@@ -2773,33 +2936,44 @@ impl DeskApp {
         set_system_volume(self.volume);
     }
     fn media_action(&mut self, action: &str) {
-        if let Some(app) = &self.media_app {
-            if self.media_actions_pending >= 3 {
-                self.notify("Playback is still responding");
-                return;
-            }
-            let app = app.clone();
-            let action = action.to_owned();
-            let sender = self.media_action_tx.clone();
-            self.media_actions_pending += 1;
-            std::thread::spawn(move || {
-                let success = if app == "Music" || app == "Spotify" {
-                    media_script(&app, &action).is_some()
-                } else {
-                    let command = match action.as_str() {
-                        "playpause" => Some("toggle"),
-                        "next track" => Some("next"),
-                        "previous track" => Some("previous"),
-                        _ => None,
-                    };
-                    command.is_some_and(|command|
-                        system_media_script(&["control", command]).as_deref() == Some("sent"))
-                };
-                let _ = sender.send(success);
-            });
-        } else {
+        let source = self.prefs.media_source.clone();
+        let system_source = source == "System" || source == "Auto";
+        if self.media_app.is_none() && !system_source {
             self.notify("Play media to use playback controls");
+            return;
         }
+        if self.media_actions_pending > 0 {
+            self.notify("Playback is still responding");
+            return;
+        }
+        let previous_playing = (action == "playpause").then_some(self.media_playing);
+        let action = if action == "playpause" {
+            if self.media_playing {
+                self.media_position = (self.media_position
+                    + self.last_media_poll.elapsed().as_secs_f32())
+                    .min(self.media_duration.max(0.0));
+            }
+            self.last_media_poll = Instant::now();
+            self.media_playing = !self.media_playing;
+            if self.media_playing { "play" } else { "pause" }.to_owned()
+        } else { action.to_owned() };
+        let app = self.media_app.clone();
+        let sender = self.media_action_tx.clone();
+        self.media_rx = None;
+        self.media_actions_pending += 1;
+        std::thread::spawn(move || {
+            let success = if system_source {
+                system_media_control(&action) || app.as_deref()
+                    .filter(|app| *app == "Music" || *app == "Spotify")
+                    .is_some_and(|app| media_script(app, &action).is_some())
+            } else if let Some(app) = app {
+                (system_media().is_some_and(|snapshot|
+                    snapshot.app.as_deref() == Some(app.as_str()))
+                    && system_media_control(&action))
+                    || media_script(&app, &action).is_some()
+            } else { false };
+            let _ = sender.send((success, previous_playing));
+        });
     }
     fn refresh_music_airplay(&mut self) {
         if self.airplay_rx.is_some() { return; }
@@ -2929,9 +3103,11 @@ impl DeskApp {
                     if let Some(app) = &self.media_app {
                         let action = if app == "Music" {
                             "set shuffle enabled to not (shuffle enabled)"
-                        } else { "set shuffling to not shuffling" };
+                        } else if app == "Spotify" {
+                            "set shuffling to not shuffling"
+                        } else { "shuffle" };
                         self.media_action(action);
-                    } else { self.notify("Open Music or Spotify to shuffle"); }
+                    } else { self.notify("Play media to use shuffle"); }
                 }
             }
         });
@@ -2965,10 +3141,12 @@ impl DeskApp {
                         .show_value(false),
                 );
                 if slider.changed() {
-                    if self.media_app.is_some() {
-                        self.media_action(&format!("set player position to {}", position));
-                        self.media_position = position;
-                    }
+                    self.media_position = position;
+                    self.last_media_poll = Instant::now();
+                }
+                if self.media_app.is_some()
+                    && (slider.drag_stopped() || (slider.changed() && !slider.dragged())) {
+                    self.media_action(&format!("set player position to {}", position));
                 }
             }
         });
@@ -3707,11 +3885,12 @@ impl DeskApp {
                     let slider = ui.add_sized([380.0, 20.0], egui::Slider::new(
                         &mut seek_to, 0.0..=self.media_duration).show_value(false));
                     if slider.changed() {
-                        if self.media_app.is_some() {
-                            self.media_position = seek_to;
-                            self.last_media_poll = Instant::now();
-                            self.media_action(&format!("set player position to {seek_to}"));
-                        }
+                        self.media_position = seek_to;
+                        self.last_media_poll = Instant::now();
+                    }
+                    if self.media_app.is_some()
+                        && (slider.drag_stopped() || (slider.changed() && !slider.dragged())) {
+                        self.media_action(&format!("set player position to {seek_to}"));
                     }
                     label(ui, &format!("{} / {}",
                         format_time(displayed as u64), format_time(self.media_duration as u64)),
@@ -4418,7 +4597,8 @@ impl DeskApp {
                 ui.horizontal(|ui| {
                     ui.add_space(28.0);
                     if ui.add(egui::Button::new(RichText::new("◀◀").size(17.0)).frame(false)).clicked() { self.media_action("previous track"); }
-                    if ui.add(egui::Button::new(RichText::new("▶").size(17.0))
+                    if ui.add(egui::Button::new(RichText::new(
+                        if self.media_playing { "Ⅱ" } else { "▶" }).size(17.0))
                         .fill(Color32::from_rgba_unmultiplied(222, 230, 250, 66))
                         .corner_radius(20).min_size(Vec2::splat(35.0))).clicked() { self.media_action("playpause"); }
                     if ui.add(egui::Button::new(RichText::new("▶▶").size(17.0)).frame(false)).clicked() { self.media_action("next track"); }
@@ -4942,9 +5122,11 @@ impl DeskApp {
     fn glass_workspace_menu(&mut self, ui: &mut egui::Ui) {
         let workspaces = self.visible_workspaces();
         let menu = Frame::new()
-            .fill(Color32::from_rgba_unmultiplied(2, 3, 5, 241))
+            .fill(Color32::from_rgba_unmultiplied(12, 16, 23, 35))
             .corner_radius(16)
-            .stroke(Stroke::new(0.7, Color32::from_rgba_unmultiplied(205, 213, 229, 104)))
+            .stroke(Stroke::new(0.7, Color32::from_rgba_unmultiplied(216, 231, 249, 80)))
+            .shadow(egui::epaint::Shadow { offset: [0, 5], blur: 17, spread: 0,
+                color: Color32::from_rgba_unmultiplied(0, 5, 16, 92) })
             .inner_margin(Margin::symmetric(3, 1))
             .show(ui, |ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
@@ -4952,21 +5134,25 @@ impl DeskApp {
                     for workspace in workspaces {
                         let active = self.menu_workspace_active(workspace);
                         let labeled = active && self.prefs.menu_labels;
+                        let menu_name = if workspace == Workspace::Nook {
+                            "Bookland"
+                        } else { workspace.name() };
                         let response = ui.add(egui::Button::new("")
-                            .fill(if active { Color32::from_rgba_unmultiplied(157, 160, 169, 75) }
+                            .fill(if active { Color32::from_rgba_unmultiplied(147, 174, 206, 74) }
                                 else { Color32::TRANSPARENT })
                             .corner_radius(17).min_size(Vec2::new(if labeled { 96.0 } else { 30.0 }, 29.0)))
-                            .on_hover_text(workspace.name());
+                            .on_hover_text(menu_name);
                         response.widget_info(|| egui::WidgetInfo::labeled(
-                            egui::WidgetType::Button, true, workspace.name()));
-                        paint_workspace_icon(ui, response.rect, workspace,
+                            egui::WidgetType::Button, true, menu_name));
+                        paint_workspace_icon(ui, response.rect, workspace, self.bookland_mark.as_ref(),
                             if active { TEXT } else { MUTED }, self.prefs.menu_style == "Dots");
                         if labeled {
                             ui.painter().text(egui::pos2(response.rect.left() + 38.0, response.rect.center().y),
-                                Align2::LEFT_CENTER, workspace.name(), FontId::proportional(12.0), TEXT);
+                                Align2::LEFT_CENTER, menu_name, FontId::proportional(12.0), TEXT);
                         }
                         if response.clicked() {
                             self.workspace = workspace;
+                            self.workspace_chosen_by_user = true;
                             if workspace == Workspace::Agents {
                                 self.agent_chat_open = false;
                                 self.agent_usage_view = false;
@@ -4996,7 +5182,7 @@ impl DeskApp {
     fn compact_glass_panel(&mut self, ui: &mut egui::Ui, width: f32, height: f32) {
         let mut gradient = None;
         let panel = Frame::new()
-            .fill(Color32::from_rgba_unmultiplied(197, 197, 199, 240))
+            .fill(glass_surface_fill())
             .corner_radius(CornerRadius { nw: 0, ne: 0, sw: 29, se: 29 })
             .shadow(egui::epaint::Shadow { offset: [0, 9], blur: 28, spread: 0,
                 color: Color32::from_rgba_unmultiplied(0, 0, 0, 125) })
@@ -5017,7 +5203,7 @@ impl DeskApp {
     fn compact_glass_music_panel(&mut self, ui: &mut egui::Ui, width: f32, height: f32) {
         let mut gradient = None;
         let panel = Frame::new()
-            .fill(Color32::from_rgba_unmultiplied(197, 197, 199, 240))
+            .fill(glass_surface_fill())
             .corner_radius(CornerRadius { nw: 0, ne: 0, sw: 29, se: 29 })
             .shadow(egui::epaint::Shadow { offset: [0, 9], blur: 28, spread: 0,
                 color: Color32::from_rgba_unmultiplied(0, 0, 0, 125) })
@@ -5051,9 +5237,12 @@ impl DeskApp {
                     let seek = ui.add(egui::Slider::new(
                         &mut seek_to, 0.0..=self.media_duration).show_value(false));
                     ui.spacing_mut().slider_width = old_slider_width;
-                    if seek.changed() && self.media_app.is_some() {
+                    if seek.changed() {
                         self.media_position = seek_to;
                         self.last_media_poll = Instant::now();
+                    }
+                    if self.media_app.is_some()
+                        && (seek.drag_stopped() || (seek.changed() && !seek.dragged())) {
                         self.media_action(&format!("set player position to {seek_to}"));
                     }
                     ui.horizontal(|ui| {
@@ -5084,15 +5273,14 @@ impl DeskApp {
                         ui.add_sized([105.0, 20.0], egui::Slider::new(
                             &mut self.volume, 0.0..=100.0).show_value(false));
                         if (old - self.volume).abs() > 0.1 { set_system_volume(self.volume); }
-                        label(ui, &format!("VOL {:.0}%", self.volume), 10.0,
-                            Color32::from_rgb(38, 43, 50));
+                        label(ui, &format!("VOL {:.0}%", self.volume), 10.0, MUTED);
                     });
                 });
                 ui.add_space(9.0);
                 if self.airplay_open {
                     if small_button(ui, "Refresh outputs").clicked() { self.refresh_music_airplay(); }
                     if !self.airplay_status.is_empty() {
-                        label(ui, &self.airplay_status, 11.0, Color32::from_rgb(43, 49, 56));
+                        label(ui, &self.airplay_status, 11.0, MUTED);
                     }
                     egui::ScrollArea::vertical().max_height(115.0).show(ui, |ui| {
                         for device in self.airplay_devices.clone().into_iter()
@@ -5112,16 +5300,15 @@ impl DeskApp {
                     for (index, line) in self.lyrics_lines[active..end].iter().enumerate() {
                         music_text(ui, if line.text.is_empty() { "♪" } else { &line.text },
                             if index == 0 { 14.0 } else { 12.0 },
-                            if index == 0 { Color32::from_rgb(28, 32, 39) }
-                                else { Color32::from_rgb(74, 78, 84) }, false, true);
+                            if index == 0 { TEXT } else { MUTED }, false, true);
                     }
-                    label(ui, "Lyrics by LRCLIB", 10.0, Color32::from_rgb(74, 78, 84));
+                    label(ui, "Lyrics by LRCLIB", 10.0, MUTED);
                 } else {
                     let airpods = self.airpods.compact_label()
                         .unwrap_or_else(|| "No AirPods connected".into());
-                    label(ui, &airpods, 12.0, Color32::from_rgb(38, 43, 50));
+                    label(ui, &airpods, 12.0, MUTED);
                     if !self.lyrics_status.is_empty() && self.lyrics_for.is_some() {
-                        label(ui, &self.lyrics_status, 10.0, Color32::from_rgb(74, 78, 84));
+                        label(ui, &self.lyrics_status, 10.0, MUTED);
                     }
                 }
             });
@@ -5135,7 +5322,7 @@ impl DeskApp {
                                      width: f32, height: f32) {
         let mut gradient = None;
         let panel = Frame::new()
-            .fill(Color32::from_rgba_unmultiplied(43, 46, 53, 238))
+            .fill(glass_surface_fill())
             .corner_radius(CornerRadius { nw: 0, ne: 0, sw: 29, se: 29 })
             .shadow(egui::epaint::Shadow { offset: [0, 9], blur: 28, spread: 0,
                 color: Color32::from_rgba_unmultiplied(0, 0, 0, 125) })
@@ -5181,7 +5368,7 @@ impl DeskApp {
                 && (self.desktop_codex_approval.is_some() || self.desktop_codex_question.is_some()));
         let mut gradient = None;
         let panel = Frame::new()
-            .fill(Color32::from_rgba_unmultiplied(197, 197, 199, 240))
+            .fill(glass_surface_fill())
             .corner_radius(CornerRadius { nw: 0, ne: 0, sw: 29, se: 29 })
             .shadow(egui::epaint::Shadow { offset: [0, 9], blur: 28, spread: 0,
                 color: Color32::from_rgba_unmultiplied(0, 0, 0, 125) })
@@ -5444,7 +5631,7 @@ impl DeskApp {
     fn compact_glass_codex_chat_panel(&mut self, ui: &mut egui::Ui, width: f32, height: f32) {
         let mut gradient = None;
         let panel = Frame::new()
-            .fill(Color32::from_rgba_unmultiplied(197, 197, 199, 240))
+            .fill(glass_surface_fill())
             .corner_radius(CornerRadius { nw: 0, ne: 0, sw: 29, se: 29 })
             .shadow(egui::epaint::Shadow { offset: [0, 9], blur: 28, spread: 0,
                 color: Color32::from_rgba_unmultiplied(0, 0, 0, 125) })
@@ -5588,7 +5775,7 @@ impl DeskApp {
         let question = self.desktop_codex_question.clone();
         let mut gradient = None;
         let panel = Frame::new()
-            .fill(Color32::from_rgba_unmultiplied(197, 197, 199, 240))
+            .fill(glass_surface_fill())
             .corner_radius(CornerRadius { nw: 0, ne: 0, sw: 29, se: 29 })
             .shadow(egui::epaint::Shadow { offset: [0, 9], blur: 28, spread: 0,
                 color: Color32::from_rgba_unmultiplied(0, 0, 0, 125) })
@@ -5879,7 +6066,7 @@ impl DeskApp {
         let workspaces = self.visible_workspaces();
         let menu = Frame::new()
             .fill(if self.prefs.style == "Glass" && self.screenshot.is_none() {
-                Color32::from_rgba_unmultiplied(4, 5, 9, 190)
+                glass_surface_fill()
             } else { BLACK })
             .corner_radius(24)
             .stroke(Stroke::new(0.8, Color32::from_rgba_unmultiplied(235, 238, 255, 58)))
@@ -5888,12 +6075,15 @@ impl DeskApp {
                 ui.horizontal(|ui| {
                     for workspace in workspaces {
                         let active = self.menu_workspace_active(workspace);
+                        let menu_name = if workspace == Workspace::Nook {
+                            "Bookland"
+                        } else { workspace.name() };
                         let labeled = active
                             && self.prefs.menu_labels
                             && self.prefs.menu_style != "Icons"
                             && self.prefs.menu_style != "Dots";
                         let text = if labeled {
-                            format!("   {}", workspace.name())
+                            format!("   {}", menu_name)
                         } else {
                             String::new()
                         };
@@ -5914,11 +6104,12 @@ impl DeskApp {
                                 .corner_radius(if self.prefs.rounded_buttons { 20 } else { 4 })
                                 .min_size(Vec2::new(if labeled { 92.0 } else { 42.0 }, 34.0)),
                             )
-                            .on_hover_text(workspace.name());
+                            .on_hover_text(menu_name);
                         paint_workspace_icon(
                             ui,
                             response.rect,
                             workspace,
+                            self.bookland_mark.as_ref(),
                             if active { TEXT } else { MUTED },
                             self.prefs.menu_style == "Dots",
                         );
@@ -6009,8 +6200,7 @@ impl DeskApp {
         let lower = if self.prefs.style == "Classic" || self.screenshot.is_some() {
             Color32::from_rgb(31, 32, 38)
         } else {
-            let alpha = (72.0 + self.prefs.glass_level * 65.0) as u8;
-            Color32::from_rgba_unmultiplied(25, 29, 40, alpha)
+            glass_surface_fill()
         };
         let lower_frame = Frame::new()
             .fill(lower)
@@ -6055,11 +6245,14 @@ impl DeskApp {
     }
     fn closed_notch(&mut self, ui: &mut egui::Ui) {
         let (width, height) = self.closed_dimensions();
+        let left_shape = ui.painter().add(egui::Shape::Noop);
+        let right_shape = ui.painter().add(egui::Shape::Noop);
+        let bridge_shape = ui.painter().add(egui::Shape::Noop);
         let response = Frame::new()
-            .fill(BLACK)
+            .fill(Color32::TRANSPARENT)
             .corner_radius(CornerRadius {
-                nw: 0,
-                ne: 0,
+                nw: 10,
+                ne: 10,
                 sw: 17,
                 se: 17,
             })
@@ -6141,8 +6334,38 @@ impl DeskApp {
             })
             .response
             .interact(egui::Sense::click());
+        let mut physical_width = 0.0;
+        let mut physical_height = 0.0;
+        #[cfg(target_os = "macos")]
+        let has_physical_notch = !self.preview_mode && self.screenshot.is_none()
+            && unsafe { nooklet_physical_notch(&mut physical_width, &mut physical_height) != 0 };
+        #[cfg(not(target_os = "macos"))]
+        let has_physical_notch = false;
+        if has_physical_notch {
+            let shoulder_width = ((response.rect.width() - physical_width as f32) * 0.5).max(0.0);
+            if let Some([left, right]) = &self.notch_shoulders {
+                let uv = egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0));
+                ui.painter().set(left_shape, egui::Shape::image(left.id(),
+                    egui::Rect::from_min_size(response.rect.min,
+                        Vec2::new(shoulder_width, response.rect.height())), uv, Color32::WHITE));
+                ui.painter().set(right_shape, egui::Shape::image(right.id(),
+                    egui::Rect::from_min_size(egui::pos2(
+                        response.rect.right() - shoulder_width, response.rect.top()),
+                        Vec2::new(shoulder_width, response.rect.height())), uv, Color32::WHITE));
+            }
+            ui.painter().set(bridge_shape, egui::Shape::rect_filled(
+                egui::Rect::from_min_max(
+                    egui::pos2(response.rect.left() + shoulder_width, response.rect.top()),
+                    egui::pos2(response.rect.right() - shoulder_width,
+                        response.rect.bottom())), 0.0, BLACK));
+        } else {
+            ui.painter().set(left_shape, egui::Shape::rect_filled(response.rect,
+                CornerRadius { nw: 10, ne: 10, sw: 17, se: 17 }, BLACK));
+        }
         response.context_menu(|ui| {
             if ui.button("Open Nook").clicked() {
+                self.workspace = Workspace::Nook;
+                self.workspace_chosen_by_user = true;
                 self.expanded = true;
                 self.opened_by_hover = true;
                 self.hover_blocked_until_exit = false;
@@ -6186,6 +6409,7 @@ impl DeskApp {
                     .unwrap_or(0);
                 true
             } else { false };
+            if !completion_clicked { self.choose_hover_workspace(); }
             self.expanded = true;
             self.opened_by_hover = !completion_clicked;
             self.hover_blocked_until_exit = false;
@@ -6206,7 +6430,7 @@ impl DeskApp {
                     self.selected_agent = self.agents.iter()
                         .position(|agent| agent.path == done.path && agent.source == done.source)
                         .unwrap_or(0);
-                }
+                } else { self.choose_hover_workspace(); }
                 self.expanded = true;
                 self.opened_by_hover = true;
                 self.last_hovered = Instant::now();
@@ -6232,29 +6456,34 @@ impl DeskApp {
         );
         let (rect, _) = ui.allocate_exact_size(Vec2::new(width, height), egui::Sense::hover());
         let radius = (17.0 + self.transition * 12.0).round() as u8;
-        let corners = CornerRadius { nw: 0, ne: 0, sw: radius, se: radius };
-        if self.prefs.style == "Glass" {
-            let reveal = ((self.transition - 0.15) / 0.70).clamp(0.0, 1.0);
-            ui.painter().rect_filled(rect, corners,
-                Color32::from_rgba_unmultiplied(0, 0, 0,
-                    ((1.0 - reveal) * 255.0).round() as u8));
-            if reveal > 0.0 {
-                let alpha = (reveal * reveal * 240.0).round() as u8;
-                ui.painter().rect_filled(rect, corners,
-                    Color32::from_rgba_unmultiplied(197, 197, 199, alpha));
-                ui.painter().add(if self.workspace == Workspace::Agents {
-                    agents_upper_shade(rect)
-                } else { island_upper_shade(rect) });
-                ui.painter().rect_stroke(rect, corners,
-                    Stroke::new(0.7,
-                        Color32::from_rgba_unmultiplied(226, 232, 245,
-                            (reveal * 95.0).round() as u8)),
-                    egui::StrokeKind::Inside);
-            }
-        } else {
-            ui.painter().rect_filled(rect, corners, BLACK);
-        }
+        let top_radius = ((1.0 - self.transition) * 10.0).round() as u8;
+        let corners = CornerRadius { nw: top_radius, ne: top_radius,
+            sw: radius, se: radius };
+        let reveal = if self.prefs.style == "Glass" {
+            ((self.transition - 0.82) / 0.14).clamp(0.0, 1.0)
+        } else { 0.0 };
+        let shell = Color32::from_rgba_unmultiplied(0, 0, 0,
+            ((1.0 - reveal) * 255.0).round() as u8);
+        ui.painter().rect_filled(rect, corners, shell);
         self.glass_rects[0] = Some(rect);
+        // Bring the actual workspace in before the shell finishes expanding.
+        // Clip it to the moving outline so text and controls do not pop in on
+        // the final frame, while leaving the native glass bound to that outline.
+        if self.prefs.style == "Glass" && self.transition >= 0.82 {
+            let full_rect = egui::Rect::from_min_size(
+                egui::pos2(rect.center().x - open_width * 0.5, rect.top()),
+                Vec2::new(open_width, open_height + 75.0),
+            );
+            let mut content = ui.new_child(egui::UiBuilder::new()
+                .max_rect(full_rect).layout(egui::Layout::top_down(Align::Min)));
+            content.set_clip_rect(rect.intersect(ui.clip_rect()));
+            content.set_opacity(reveal);
+            if !self.expanded || self.transition < 0.98 { content.disable(); }
+            self.panel(&mut content);
+            self.glass_rects[0] = Some(rect);
+            self.glass_rects[1] = None;
+            self.open_notch_rect = Some(rect);
+        }
     }
     fn settings_nav(&mut self, ui: &mut egui::Ui) {
         for (group, items) in [
@@ -6395,6 +6624,7 @@ impl DeskApp {
                 card().show(ui, |ui| {
                     if small_button(ui, "Open notch").clicked() {
                         self.expanded = true;
+                        self.opened_by_hover = false;
                     }
                     ui.checkbox(&mut self.prefs.demo_mode, "Demo mode")
                         .on_hover_text("Shows labeled sample activity in the Agents workspace.");
@@ -7117,7 +7347,27 @@ impl Drop for DeskApp {
 }
 
 impl eframe::App for DeskApp {
+    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        // eframe's default clear has 180/255 alpha. That paints the entire
+        // transparent host as a faint rectangle around the camera cutout.
+        [0.0, 0.0, 0.0, 0.0]
+    }
+
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if self.notch_shoulders.is_none() {
+            let load = |name, bytes: &[u8]| -> Option<egui::TextureHandle> {
+                let image = image::load_from_memory(bytes).ok()?.to_rgba8();
+                let pixels = egui::ColorImage::from_rgba_unmultiplied(
+                    [image.width() as usize, image.height() as usize], image.as_raw());
+                Some(ctx.load_texture(name, pixels, egui::TextureOptions::LINEAR))
+            };
+            if let (Some(left), Some(right)) = (
+                load("notch-shoulder-left", include_bytes!("../assets/notch-shoulder-left.png")),
+                load("notch-shoulder-right", include_bytes!("../assets/notch-shoulder-right.png")),
+            ) {
+                self.notch_shoulders = Some([left, right]);
+            }
+        }
         if self.codex_logo.is_none() {
             if let Ok(image) = image::load_from_memory(
                 include_bytes!("../assets/openai-blossom-white.png")) {
@@ -7125,6 +7375,16 @@ impl eframe::App for DeskApp {
                 let pixels = egui::ColorImage::from_rgba_unmultiplied(
                     [rgba.width() as usize, rgba.height() as usize], rgba.as_raw());
                 self.codex_logo = Some(ctx.load_texture("openai-blossom", pixels,
+                    egui::TextureOptions::LINEAR));
+            }
+        }
+        if self.bookland_mark.is_none() {
+            if let Ok(image) = image::load_from_memory(
+                include_bytes!("../assets/brand/bookland-mark.png")) {
+                let rgba = image.to_rgba8();
+                let pixels = egui::ColorImage::from_rgba_unmultiplied(
+                    [rgba.width() as usize, rgba.height() as usize], rgba.as_raw());
+                self.bookland_mark = Some(ctx.load_texture("bookland-mark", pixels,
                     egui::TextureOptions::LINEAR));
             }
         }
@@ -7220,30 +7480,28 @@ impl eframe::App for DeskApp {
         let target_changed = self.expanded != self.animation_target_expanded;
         self.animation_target_expanded = self.expanded;
         let dt = if target_changed { 0.0 }
-            else { now.duration_since(self.last_frame).as_secs_f32().min(0.1) };
+            else { now.duration_since(self.last_frame).as_secs_f32().min(1.0) };
         self.last_frame = now;
         let expanded_before_panel = self.expanded;
         let target = if self.expanded { 1.0 } else { 0.0 };
-        let response = if self.expanded { 0.47 } else { 0.4 };
-        let damping = if self.prefs.style == "Glass" {
-            if self.expanded {
-                0.88
-            } else {
-                0.94
-            }
+        #[cfg(target_os = "macos")]
+        let reduce_motion = unsafe { nooklet_reduce_motion() != 0 };
+        #[cfg(not(target_os = "macos"))]
+        let reduce_motion = false;
+        // The original notch shape uses a 0.5 s / 0.82 SwiftUI spring.
+        // Keep the slight overshoot instead of snapping to the open size at
+        // the first crossing. Reduce Motion remains fully damped.
+        let (response, damping) = if reduce_motion {
+            (0.25, 1.0)
+        } else if self.prefs.style == "Glass" {
+            (0.5, 0.82)
         } else {
-            1.0
+            (if self.expanded { 0.47 } else { 0.4 }, 1.0)
         };
         let omega = std::f32::consts::TAU * self.prefs.animation_speed.clamp(0.5, 2.0) / response;
         (self.transition, self.transition_velocity) = spring_step(
             self.transition, self.transition_velocity, target, omega, damping, dt);
-        self.transition = self.transition.clamp(0.0, 1.0);
-        if self.transition == target
-            && ((target == 1.0 && self.transition_velocity > 0.0)
-                || (target == 0.0 && self.transition_velocity < 0.0))
-        {
-            self.transition_velocity = 0.0;
-        }
+        self.transition = self.transition.clamp(0.0, 1.02);
         if (self.transition - target).abs() < 0.005 && self.transition_velocity.abs() < 0.02 {
             self.transition = target;
             self.transition_velocity = 0.0;
@@ -7270,17 +7528,17 @@ impl eframe::App for DeskApp {
             && self.prefs.widgets == Widget::DEFAULT && self.prefs.nook_enabled
             && open_height <= 260.0;
         let (closed_width, closed_height) = self.closed_dimensions();
-        let size = Vec2::new(
-            egui::lerp(
-                closed_width + 30.0..=open_width + 44.0,
-                self.transition,
-            ),
-            egui::lerp(
-                closed_height + 12.0..=open_height + if position_bottom { 34.0 }
-                    else if compact_nook { 75.0 } else { 160.0 },
-                self.transition,
-            ),
-        );
+        // Let the spring animate the painted island inside a stable host.
+        // Resizing the Metal swapchain on every spring frame creates visible
+        // pacing stalls and more work for WindowServer. Keep the expanded host
+        // through the morph, then shrink it once the closed shape settles.
+        let full_height = open_height + if position_bottom { 34.0 }
+            else if compact_nook { 75.0 } else { 160.0 };
+        let size = if self.transition == 0.0 && !self.expanded {
+            Vec2::new(closed_width + 30.0, closed_height + 12.0)
+        } else {
+            Vec2::new(open_width + 44.0, full_height)
+        };
         if !self.positioned || size != self.applied_size || position_bottom != self.last_bottom_position {
             ctx.send_viewport_cmd(ViewportCommand::InnerSize(size));
             if let Some(monitor) = ctx.input(|i| i.viewport().monitor_size) {
@@ -7303,7 +7561,9 @@ impl eframe::App for DeskApp {
             }))
             .show(ctx, |ui| {
                 ui.vertical_centered(|ui| {
-                    if self.transition >= 0.96 {
+                    if self.transition >= 0.96
+                        && (self.prefs.style != "Glass" || self.transition == target
+                            || self.screenshot.is_some() || self.preview_mode) {
                         self.panel(ui);
                     } else if self.transition > 0.0 {
                         self.morphing_notch(ui);
