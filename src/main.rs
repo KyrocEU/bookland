@@ -2664,6 +2664,7 @@ impl DeskApp {
         self.pocket_status = match action {
             pocket::Action::Keep => "Keeping a copy…",
             pocket::Action::Png | pocket::Action::Jpeg => "Converting image…",
+            pocket::Action::Zip => "Creating ZIP…",
         }.into();
     }
     fn poll_pocket(&mut self) {
@@ -2688,6 +2689,7 @@ impl DeskApp {
                         pocket::Action::Keep => "Saved a copy in Pocket",
                         pocket::Action::Png => "Converted to PNG in Pocket",
                         pocket::Action::Jpeg => "Converted to JPEG in Pocket",
+                        pocket::Action::Zip => "Created ZIP in Pocket",
                     }.into();
                     self.notify(self.pocket_status.clone());
                 }
@@ -4847,7 +4849,7 @@ impl DeskApp {
         ui.add_space(13.0);
         card().show(ui, |ui| {
             label(ui, "Pocket", 18.0, TEXT);
-            label(ui, "Drop a file on the island, or choose one here. Keep a copy, convert an image, or share with AirDrop.", 12.0, MUTED);
+            label(ui, "Drop a file on the island, or choose one here. Keep a copy, create a ZIP, convert an image, or share with AirDrop.", 12.0, MUTED);
             ui.horizontal(|ui| {
                 if ui.button("Add file or folder").clicked() {
                     #[cfg(target_os = "macos")]
@@ -4908,6 +4910,10 @@ impl DeskApp {
                             }
                         }
                     }
+                    if ui.add_enabled(path.exists() && self.pocket_job.is_none(),
+                        egui::Button::new("Create ZIP")).clicked() {
+                        self.start_pocket_action(path.clone(), pocket::Action::Zip);
+                    }
                     if ui.add_enabled(path.exists(), egui::Button::new("AirDrop")).clicked() {
                         #[cfg(target_os = "macos")]
                         {
@@ -4951,7 +4957,7 @@ impl DeskApp {
                                 }
                             });
                         });
-                        label(ui, "Drop a file here to keep, convert, or share it.", 12.0, MUTED);
+                        label(ui, "Drop a file here to keep, ZIP, convert, or share it.", 12.0, MUTED);
                         ui.add_space(12.0);
                         if let Some(path) = self.files.first().cloned() {
                             let name = path.file_name().and_then(|name| name.to_str()).unwrap_or("File");
@@ -4975,6 +4981,10 @@ impl DeskApp {
                                             self.start_pocket_action(path.clone(), action);
                                         }
                                     }
+                                }
+                                if ui.add_enabled(path.exists() && self.pocket_job.is_none(),
+                                    egui::Button::new("Create ZIP")).clicked() {
+                                    self.start_pocket_action(path.clone(), pocket::Action::Zip);
                                 }
                                 if ui.add_enabled(path.exists(), egui::Button::new("AirDrop")).clicked() {
                                     #[cfg(target_os = "macos")]
@@ -8699,7 +8709,7 @@ impl eframe::App for DeskApp {
         }
         if self.pocket_floating && self.screenshot.is_none() {
             let pocket_height = if self.files.is_empty() { 200.0 }
-                else if self.pocket_status.is_empty() { 270.0 } else { 295.0 };
+                else if self.pocket_status.is_empty() { 295.0 } else { 320.0 };
             let builder = egui::ViewportBuilder::default()
                 .with_title("Bookland Pocket")
                 .with_position(self.pocket_anchor)
