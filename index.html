@@ -16,6 +16,7 @@
   <title>Bookland — A living island for your Mac</title>
 </head>
 <body>
+  <div class="scroll-progress" aria-hidden="true"><span></span></div>
   <a class="skip-link" href="#main">Skip to content</a>
   <header class="site-header">
     <nav class="nav wrap" aria-label="Main navigation">
@@ -46,12 +47,11 @@
         </div>
         <p class="hero-note">Built for macOS 26 or later · Source available under MIT</p>
       </div>
-      <div class="hero-art" aria-hidden="true">
-        <div class="hero-orbit orbit-one"></div>
-        <div class="hero-orbit orbit-two"></div>
-        <div class="hero-icon"><img src="/bookland-icon.png" width="250" height="250" alt=""></div>
-        <div class="hero-caption">MADE FOR THE TOP EDGE</div>
-      </div>
+      <figure class="hero-product">
+        <div class="hero-product-topline"><span><i aria-hidden="true"></i> CAPTURED ON A MAC</span><span>THE BOOKLAND NOOK</span></div>
+        <div class="hero-product-viewport"><img src="/media/app-nook.png" width="2140" height="500" alt="The running Bookland island open around the Mac camera, with music, system pulse, focus timer, tasks and a floating workspace menu" fetchpriority="high"></div>
+        <figcaption><span>One hover. Your day, right there.</span><span>Actual app capture · macOS Liquid Glass</span></figcaption>
+      </figure>
     </section>
 
     <section class="experience" id="experience" aria-labelledby="experience-title">
@@ -172,8 +172,8 @@
     </section>
 
     <section class="faq wrap" aria-labelledby="faq-title"><div class="faq-heading"><p class="kicker">GOOD TO KNOW</p><h2 id="faq-title">A few honest answers.</h2></div><div class="faq-list">
-      <details><summary>Do I need a Mac with a camera notch?</summary><p>Bookland anchors at the top edge of the screen. Its camera-aware closed strip is designed for a MacBook notch. A synthetic notch on every external display is not part of this preview.</p></details>
-      <details><summary>Does it connect to Google Calendar?</summary><p>Yes. Add Google to macOS Calendar, enable Calendars for that account, then grant Bookland Calendar access and select the calendar in the app. Bookland does not store a Google password or OAuth token.</p></details>
+      <details><summary>Do I need a Mac with a camera notch?</summary><p>Bookland anchors at the top edge of a MacBook display and wraps its camera cutout. You can also target a connected display, where Bookland draws a rounded island. The current build shows one island at a time.</p></details>
+      <details><summary>Does it connect to Google Calendar?</summary><p>Bookland reads calendars connected through macOS Calendar, including a Google calendar, after you grant macOS Calendar access and select one in the app. The Calendar permission flow is still being validated for the current build. Bookland does not store a Google password or OAuth token.</p></details>
       <details><summary>Can I approve every Codex request from Bookland?</summary><p>Bookland can show decisions for turns started through its Codex connection. Requests from turns already running in the Codex desktop app do not currently flow into Bookland.</p></details>
       <details><summary>Is this NotchNook?</summary><p>No. Bookland is an independent open-source project inspired by the idea of a Mac hover island. It is not affiliated with NotchNook or OpenAI, and it does not claim full feature parity.</p></details>
     </div></section>
