@@ -59,6 +59,8 @@ unsafe extern "C" {
     fn nooklet_progress_ring_set(enabled: i32, x: f64, y: f64, usage_style: i32);
     fn bookland_activity_bubble_show(message: *const std::ffi::c_char, closed_width: f64);
     fn bookland_activity_bubble_hide();
+    fn bookland_conversion_card_show(path: *const std::ffi::c_char);
+    fn bookland_conversion_card_hide();
     fn bookland_volume_hud_set(enabled: i32);
     fn bookland_system_volume_get() -> f32;
     fn bookland_system_volume_set(value: f32) -> i32;
@@ -738,6 +740,8 @@ struct DeskApp {
     native_usage_ring_center: Option<egui::Pos2>,
     pending_activity_bubble: Option<String>,
     activity_bubble_visible: bool,
+    pending_conversion_card: Option<(PathBuf, Instant)>,
+    conversion_card_visible: bool,
     native_morph_shell: Option<(egui::Rect, f32, f32, f32)>,
     island_gesture: IslandGesture,
     last_haptic_expanded: bool,
@@ -2301,6 +2305,8 @@ impl DeskApp {
             native_usage_ring_center: None,
             pending_activity_bubble: None,
             activity_bubble_visible: false,
+            pending_conversion_card: None,
+            conversion_card_visible: false,
             native_morph_shell: None,
             island_gesture: IslandGesture::default(),
             last_haptic_expanded: expanded,
@@ -2507,6 +2513,12 @@ impl DeskApp {
                     bookland_activity_bubble_hide();
                     self.activity_bubble_visible = false;
                 }
+                if (self.expanded || self.prefs.style != "Glass"
+                    || self.screenshot.is_some() || self.preview_mode)
+                    && self.conversion_card_visible {
+                    bookland_conversion_card_hide();
+                    self.conversion_card_visible = false;
+                }
                 if let Some(message) = self.pending_activity_bubble.take() {
                     if !self.expanded && self.prefs.style == "Glass"
                         && self.screenshot.is_none() && !self.preview_mode {
@@ -2515,6 +2527,19 @@ impl DeskApp {
                             bookland_activity_bubble_show(message.as_ptr(),
                                 f64::from(self.closed_dimensions().0));
                             self.activity_bubble_visible = true;
+                        }
+                    }
+                }
+                if self.pending_conversion_card.as_ref().is_some_and(|(_, at)|
+                    at.elapsed() >= Duration::from_secs(6)) {
+                    self.pending_conversion_card = None;
+                }
+                if !self.expanded && self.prefs.style == "Glass"
+                    && self.screenshot.is_none() && !self.preview_mode {
+                    if let Some((path, _)) = self.pending_conversion_card.take() {
+                        if let Ok(path) = CString::new(path.to_string_lossy().as_bytes()) {
+                            bookland_conversion_card_show(path.as_ptr());
+                            self.conversion_card_visible = true;
                         }
                     }
                 }
@@ -2796,6 +2821,11 @@ impl DeskApp {
             let job = self.pocket_job.take().unwrap();
             match result {
                 Ok(path) => {
+                    let is_conversion = match &job.operation {
+                        PocketOperation::Pipeline(_) => true,
+                        PocketOperation::Action(action) =>
+                            !matches!(action, pocket::Action::Keep | pocket::Action::Zip),
+                    };
                     let short = match &job.operation {
                         PocketOperation::Action(pocket::Action::Keep) => "Copy".into(),
                         PocketOperation::Pipeline(_) => "Pipeline".into(),
@@ -2806,7 +2836,7 @@ impl DeskApp {
                         self.files.retain(|item| item != &job.source);
                     }
                     self.files.retain(|item| item != &path);
-                    self.files.insert(0, path);
+                    self.files.insert(0, path.clone());
                     self.files.truncate(8);
                     self.save_data();
                     self.pocket_status = match job.operation {
@@ -2828,7 +2858,11 @@ impl DeskApp {
                     };
                     let cue = format!("{short} ready");
                     self.pocket_activity = Some((cue.clone(), true, Instant::now()));
-                    self.pending_activity_bubble = Some(cue);
+                    if is_conversion {
+                        self.pending_conversion_card = Some((path, Instant::now()));
+                    } else {
+                        self.pending_activity_bubble = Some(cue);
+                    }
                     self.notify(self.pocket_status.clone());
                 }
                 Err(error) => {

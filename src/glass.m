@@ -1,5 +1,6 @@
 #import <AppKit/AppKit.h>
 #import <QuartzCore/QuartzCore.h>
+#import <QuickLookThumbnailing/QuickLookThumbnailing.h>
 #import <os/log.h>
 #include <string.h>
 
@@ -22,6 +23,14 @@ static NSGlassEffectView *booklandActivityGlass;
 static NSTextField *booklandActivityLabel;
 static unsigned long long booklandActivityGeneration;
 static BOOL booklandActivityDismissing;
+static NSWindow *booklandConversionWindow;
+static NSGlassEffectView *booklandConversionGlass;
+static NSImageView *booklandConversionPreview;
+static NSTextField *booklandConversionName;
+static NSURL *booklandConversionURL;
+static QLThumbnailGenerationRequest *booklandConversionRequest;
+static unsigned long long booklandConversionGeneration;
+static BOOL booklandConversionDismissing;
 static id booklandScrollMonitor;
 static double booklandScrollDeltaX;
 static double booklandScrollDeltaY;
@@ -726,5 +735,208 @@ void bookland_activity_bubble_show(const char *utf8, double closedWidth) {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.1 * NSEC_PER_SEC)),
         dispatch_get_main_queue(), ^{
             if (generation == booklandActivityGeneration) bookland_activity_bubble_hide();
+        });
+}
+
+void bookland_conversion_card_hide(void);
+
+@interface BooklandConversionCardAction : NSObject
+- (void)showInFinder:(id)sender;
+@end
+
+@implementation BooklandConversionCardAction
+- (void)showInFinder:(id)sender {
+    (void)sender;
+    if (!booklandConversionURL) return;
+    [NSWorkspace.sharedWorkspace activateFileViewerSelectingURLs:@[booklandConversionURL]];
+    bookland_conversion_card_hide();
+}
+@end
+
+static id booklandConversionAction;
+
+static NSTextField *booklandConversionText(NSRect frame, CGFloat size,
+                                           NSFontWeight weight, NSColor *color) {
+    NSTextField *label = [[NSTextField alloc] initWithFrame:frame];
+    label.editable = NO;
+    label.selectable = NO;
+    label.bezeled = NO;
+    label.drawsBackground = NO;
+    label.lineBreakMode = NSLineBreakByTruncatingMiddle;
+    label.textColor = color;
+    label.font = [NSFont systemFontOfSize:size weight:weight];
+    NSShadow *shadow = [NSShadow new];
+    shadow.shadowColor = [NSColor colorWithWhite:0 alpha:0.7];
+    shadow.shadowBlurRadius = 3;
+    label.shadow = shadow;
+    return label;
+}
+
+static void booklandPrepareConversionCard(void) {
+    if (booklandConversionWindow || !nookletHostWindow) return;
+    const CGFloat width = 336, height = 94;
+    NSWindow *window = [[NSWindow alloc]
+        initWithContentRect:NSMakeRect(0, 0, width, height)
+                  styleMask:NSWindowStyleMaskBorderless
+                    backing:NSBackingStoreBuffered defer:NO];
+    window.opaque = NO;
+    window.backgroundColor = NSColor.clearColor;
+    window.hasShadow = YES;
+    window.ignoresMouseEvents = NO;
+    window.collectionBehavior = nookletHostWindow.collectionBehavior;
+    window.level = NSStatusWindowLevel;
+    NSGlassEffectView *glass = [[NSGlassEffectView alloc]
+        initWithFrame:NSMakeRect(0, 0, width, height)];
+    glass.wantsLayer = YES;
+    glass.style = NSGlassEffectViewStyleRegular;
+    glass.cornerRadius = 20;
+    glass.tintColor = [NSColor colorWithCalibratedRed:0.46 green:0.50
+                                                 blue:0.58 alpha:0.08];
+    NSImageView *preview = [[NSImageView alloc]
+        initWithFrame:NSMakeRect(17, 19, 56, 56)];
+    preview.imageScaling = NSImageScaleProportionallyUpOrDown;
+    preview.wantsLayer = YES;
+    preview.layer.cornerRadius = 9;
+    preview.layer.masksToBounds = YES;
+    [glass addSubview:preview];
+    NSTextField *name = booklandConversionText(NSMakeRect(87, 54, 232, 20),
+        13, NSFontWeightSemibold, NSColor.whiteColor);
+    [glass addSubview:name];
+    NSTextField *status = booklandConversionText(NSMakeRect(87, 34, 232, 17),
+        11, NSFontWeightRegular,
+        [NSColor colorWithCalibratedRed:0.82 green:0.89 blue:0.98 alpha:1]);
+    status.stringValue = @"Converted in Pocket";
+    [glass addSubview:status];
+    NSTextField *hint = booklandConversionText(NSMakeRect(87, 14, 232, 17),
+        11, NSFontWeightMedium,
+        [NSColor colorWithCalibratedRed:0.62 green:0.79 blue:1 alpha:1]);
+    hint.stringValue = @"Show in Finder";
+    [glass addSubview:hint];
+    booklandConversionAction = [BooklandConversionCardAction new];
+    NSButton *button = [[NSButton alloc]
+        initWithFrame:NSMakeRect(0, 0, width, height)];
+    button.bordered = NO;
+    button.transparent = YES;
+    button.title = @"";
+    button.target = booklandConversionAction;
+    button.action = @selector(showInFinder:);
+    [button setAccessibilityElement:YES];
+    button.accessibilityLabel = @"Show converted file in Finder";
+    [glass addSubview:button];
+    window.contentView = glass;
+    [nookletHostWindow addChildWindow:window ordered:NSWindowAbove];
+    booklandConversionWindow = window;
+    booklandConversionGlass = glass;
+    booklandConversionPreview = preview;
+    booklandConversionName = name;
+}
+
+void bookland_conversion_card_hide(void) {
+    if (!booklandConversionWindow.isVisible || booklandConversionDismissing) return;
+    booklandConversionDismissing = YES;
+    ++booklandConversionGeneration;
+    unsigned long long generation = booklandConversionGeneration;
+    if (booklandConversionRequest) {
+        [QLThumbnailGenerator.sharedGenerator cancelRequest:booklandConversionRequest];
+        booklandConversionRequest = nil;
+    }
+    CALayer *layer = booklandConversionGlass.layer;
+    if (nooklet_reduce_motion()) {
+        [booklandConversionWindow orderOut:nil];
+        booklandConversionDismissing = NO;
+        return;
+    }
+    CALayer *presented = (CALayer *)layer.presentationLayer;
+    CABasicAnimation *fade = [CABasicAnimation animationWithKeyPath:@"opacity"];
+    fade.fromValue = @(presented ? presented.opacity : layer.opacity);
+    fade.toValue = @0;
+    fade.duration = 0.19;
+    fade.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseIn];
+    CABasicAnimation *slide = [CABasicAnimation
+        animationWithKeyPath:@"transform.translation.y"];
+    slide.fromValue = @(presented ? presented.transform.m42 : 0);
+    slide.toValue = @12;
+    slide.duration = fade.duration;
+    slide.timingFunction = fade.timingFunction;
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    layer.opacity = 0;
+    [layer addAnimation:fade forKey:@"booklandConversionFade"];
+    [layer addAnimation:slide forKey:@"booklandConversionSlide"];
+    [CATransaction commit];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.20 * NSEC_PER_SEC)),
+        dispatch_get_main_queue(), ^{
+            if (generation != booklandConversionGeneration) return;
+            [booklandConversionWindow orderOut:nil];
+            booklandConversionDismissing = NO;
+        });
+}
+
+void bookland_conversion_card_show(const char *utf8Path) {
+    if (!utf8Path || !*utf8Path || !nookletHostWindow) return;
+    NSString *path = [NSString stringWithUTF8String:utf8Path];
+    if (!path.length || ![NSFileManager.defaultManager fileExistsAtPath:path]) return;
+    booklandPrepareConversionCard();
+    if (!booklandConversionWindow) return;
+    ++booklandConversionGeneration;
+    unsigned long long generation = booklandConversionGeneration;
+    booklandConversionDismissing = NO;
+    NSURL *url = [NSURL fileURLWithPath:path];
+    booklandConversionURL = url;
+    booklandConversionName.stringValue = url.lastPathComponent ?: @"Converted file";
+    booklandConversionPreview.image = [NSWorkspace.sharedWorkspace iconForFile:path];
+    if (booklandConversionRequest) {
+        [QLThumbnailGenerator.sharedGenerator cancelRequest:booklandConversionRequest];
+    }
+    NSScreen *screen = nookletHostWindow.screen ?: NSScreen.mainScreen;
+    if (!screen) return;
+    CGFloat width = booklandConversionWindow.frame.size.width;
+    CGFloat height = booklandConversionWindow.frame.size.height;
+    CGFloat top = NSMaxY(screen.frame) - fmax(32, screen.safeAreaInsets.top) - 8;
+    [booklandConversionWindow setFrame:NSMakeRect(NSMidX(screen.frame) - width / 2,
+        top - height, width, height) display:NO];
+    CALayer *layer = booklandConversionGlass.layer;
+    [layer removeAllAnimations];
+    if (!booklandConversionWindow.isVisible) [booklandConversionWindow orderFront:nil];
+    if (nooklet_reduce_motion()) {
+        layer.opacity = 1;
+    } else {
+        CASpringAnimation *enter = [CASpringAnimation
+            animationWithKeyPath:@"transform.translation.y"];
+        enter.fromValue = @14;
+        enter.toValue = @0;
+        enter.mass = 1;
+        enter.stiffness = 140;
+        enter.damping = 18;
+        enter.duration = fmin(0.55, enter.settlingDuration);
+        CABasicAnimation *fade = [CABasicAnimation animationWithKeyPath:@"opacity"];
+        fade.fromValue = @0;
+        fade.toValue = @1;
+        fade.duration = 0.13;
+        [CATransaction begin];
+        [CATransaction setDisableActions:YES];
+        layer.opacity = 1;
+        [layer addAnimation:enter forKey:@"booklandConversionEnter"];
+        [layer addAnimation:fade forKey:@"booklandConversionFade"];
+        [CATransaction commit];
+    }
+    QLThumbnailGenerationRequest *request = [[QLThumbnailGenerationRequest alloc]
+        initWithFileAtURL:url size:CGSizeMake(56, 56)
+                    scale:screen.backingScaleFactor
+      representationTypes:QLThumbnailGenerationRequestRepresentationTypeThumbnail];
+    booklandConversionRequest = request;
+    [QLThumbnailGenerator.sharedGenerator generateBestRepresentationForRequest:request
+        completionHandler:^(QLThumbnailRepresentation *thumbnail, NSError *error) {
+            (void)error;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (generation != booklandConversionGeneration) return;
+                if (thumbnail.NSImage) booklandConversionPreview.image = thumbnail.NSImage;
+                booklandConversionRequest = nil;
+            });
+        }];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(6 * NSEC_PER_SEC)),
+        dispatch_get_main_queue(), ^{
+            if (generation == booklandConversionGeneration)
+                bookland_conversion_card_hide();
         });
 }

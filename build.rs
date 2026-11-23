@@ -18,6 +18,7 @@ fn main() {
             .compile("nooklet_glass");
         println!("cargo:rustc-link-lib=framework=AppKit");
         println!("cargo:rustc-link-lib=framework=QuartzCore");
+        println!("cargo:rustc-link-lib=framework=QuickLookThumbnailing");
         println!("cargo:rustc-link-lib=framework=EventKit");
         println!("cargo:rustc-link-lib=framework=Carbon");
         println!("cargo:rustc-link-lib=framework=AVFoundation");
