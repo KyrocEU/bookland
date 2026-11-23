@@ -1,5 +1,6 @@
 use std::{
     collections::VecDeque,
+    fs,
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -57,6 +58,26 @@ pub fn tool_path() -> Option<PathBuf> {
     local.is_file().then_some(local)
 }
 
+fn publish_completed(source: &Path, folder: &Path) -> Result<PathBuf, String> {
+    let name = source.file_name().ok_or("Download has no file name")?;
+    let stem = source.file_stem().ok_or("Download has no file name")?
+        .to_string_lossy();
+    let extension = source.extension().map(|part| part.to_string_lossy());
+    for number in 0..1000 {
+        let destination = if number == 0 { folder.join(name) } else {
+            let suffix = extension.as_ref().map(|part| format!(".{part}"))
+                .unwrap_or_default();
+            folder.join(format!("{stem} ({number}){suffix}"))
+        };
+        match fs::hard_link(source, &destination) {
+            Ok(()) => return Ok(destination),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(format!("Could not save the completed video: {error}")),
+        }
+    }
+    Err("Too many videos have the same name".into())
+}
+
 fn parse_progress(line: &str) -> Option<VideoProgress> {
     let text = line.strip_prefix("BOOKLAND_PROGRESS ")?;
     let parts: Vec<_> = text.split('|').collect();
@@ -72,7 +93,9 @@ fn parse_progress(line: &str) -> Option<VideoProgress> {
 
 pub fn download(tool: &Path, url: &str, folder: &Path, tx: Sender<VideoEvent>) {
     let outcome = (|| -> Result<(), String> {
-        std::fs::create_dir_all(folder).map_err(|error| error.to_string())?;
+        fs::create_dir_all(folder).map_err(|error| error.to_string())?;
+        let staging = tempfile::Builder::new().prefix(".bookland-video-")
+            .tempdir_in(folder).map_err(|error| error.to_string())?;
         let mut command = Command::new(tool);
         command.args([
             "--no-config", "--no-playlist", "--no-simulate", "--newline", "--progress",
@@ -80,7 +103,7 @@ pub fn download(tool: &Path, url: &str, folder: &Path, tx: Sender<VideoEvent>) {
             "download:BOOKLAND_PROGRESS %(progress._percent_str)s|%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.speed)s|%(progress.eta)s",
             "--print", "after_move:filepath",
             "--merge-output-format", "mp4",
-            "-P", folder.to_str().ok_or("Invalid Tray path")?,
+            "-P", staging.path().to_str().ok_or("Invalid Tray path")?,
             "-o", "%(title).100B [%(id)s].%(ext)s",
         ]);
         if let Some(home) = std::env::var_os("HOME") {
@@ -100,23 +123,31 @@ pub fn download(tool: &Path, url: &str, folder: &Path, tx: Sender<VideoEvent>) {
             recent.into_iter().collect::<Vec<_>>().join("\n")
         });
         let output = child.stdout.take().ok_or("No progress stream")?;
-        let mut saved = false;
+        let mut completed = None;
         for line in BufReader::new(output).lines().flatten() {
             if let Some(progress) = parse_progress(&line) {
                 let _ = tx.send(VideoEvent::Progress(progress));
             } else {
                 let candidate = PathBuf::from(line.trim());
-                if candidate.is_file() && candidate.starts_with(folder) {
-                    saved = true;
-                    let _ = tx.send(VideoEvent::Saved(candidate));
+                if candidate.is_file() && candidate.starts_with(staging.path()) {
+                    completed = Some(candidate);
                 }
             }
         }
         let status = child.wait().map_err(|error| error.to_string())?;
         let errors = errors.join().unwrap_or_default();
-        if status.success() && saved { Ok(()) }
-        else if status.success() { Err("Download ended without a saved file".into()) }
-        else { Err(errors.lines().rev().find(|line| line.contains("ERROR"))
+        if status.success() {
+            let source = completed.ok_or("Download ended without a saved file")?;
+            let source = source.canonicalize().map_err(|error| error.to_string())?;
+            let staging_root = staging.path().canonicalize()
+                .map_err(|error| error.to_string())?;
+            if !source.starts_with(staging_root) {
+                return Err("Download output escaped its staging folder".into());
+            }
+            let path = publish_completed(&source, folder)?;
+            let _ = tx.send(VideoEvent::Saved(path));
+            Ok(())
+        } else { Err(errors.lines().rev().find(|line| line.contains("ERROR"))
             .or_else(|| errors.lines().last()).unwrap_or("Download failed").to_owned()) }
     })();
     let _ = tx.send(VideoEvent::Finished(outcome));
@@ -141,5 +172,51 @@ mod tests {
         assert_eq!(p.total, Some(1000));
         assert_eq!(p.speed, Some(500));
         assert_eq!(p.eta, Some(3));
+    }
+    #[test]
+    fn publishing_keeps_an_existing_video() {
+        let folder = tempfile::tempdir().unwrap();
+        let staging = tempfile::tempdir_in(folder.path()).unwrap();
+        let source = staging.path().join("solar.mp4");
+        fs::write(&source, b"new video").unwrap();
+        fs::write(folder.path().join("solar.mp4"), b"existing video").unwrap();
+        let published = publish_completed(&source, folder.path()).unwrap();
+        assert_eq!(published.file_name().unwrap(), "solar (1).mp4");
+        assert_eq!(fs::read(folder.path().join("solar.mp4")).unwrap(), b"existing video");
+        assert_eq!(fs::read(published).unwrap(), b"new video");
+    }
+    #[cfg(unix)]
+    #[test]
+    fn cancelled_download_removes_partial_file() {
+        use std::{os::unix::fs::PermissionsExt, sync::mpsc, time::Duration};
+        let root = tempfile::tempdir().unwrap();
+        let tool = root.path().join("fake-downloader");
+        fs::write(&tool, "#!/bin/sh\nset -eu\nwhile [ \"$#\" -gt 0 ]; do\n  if [ \"$1\" = '-P' ]; then\n    shift\n    printf incomplete > \"$1/test.part\"\n    break\n  fi\n  shift\ndone\nexec sleep 30\n").unwrap();
+        fs::set_permissions(&tool, fs::Permissions::from_mode(0o700)).unwrap();
+        let folder = root.path().join("Tray");
+        let (tx, rx) = mpsc::channel();
+        let work = {
+            let tool = tool.clone();
+            let folder = folder.clone();
+            std::thread::spawn(move || download(&tool, "test-url", &folder, tx))
+        };
+        let pid = match rx.recv_timeout(Duration::from_secs(3)).unwrap() {
+            VideoEvent::Started(pid) => pid,
+            _ => panic!("downloader did not start"),
+        };
+        let mut partial_found = false;
+        for _ in 0..100 {
+            partial_found = fs::read_dir(&folder).unwrap().filter_map(Result::ok)
+                .any(|entry| entry.path().join("test.part").is_file());
+            if partial_found { break; }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(partial_found, "fake downloader did not write its partial file");
+        assert!(Command::new("kill").arg("-TERM").arg(pid.to_string())
+            .status().unwrap().success());
+        work.join().unwrap();
+        assert!(rx.try_iter().any(|event| matches!(event, VideoEvent::Finished(Err(_)))));
+        assert!(fs::read_dir(folder).unwrap().next().is_none(),
+            "staging folder remained after cancellation");
     }
 }

@@ -3033,11 +3033,11 @@ impl DeskApp {
                 VideoEvent::Finished(result) => {
                     self.video_rx = None;
                     self.video_pid = None;
-                    self.video_status = if self.video_stopping { "Download cancelled".into() }
-                        else { match result {
-                            Ok(()) => "Saved to Tray".into(),
-                            Err(error) => format!("Download failed: {error}"),
-                        }};
+                    self.video_status = match result {
+                        Ok(()) => "Saved to Tray".into(),
+                        Err(_) if self.video_stopping => "Download cancelled".into(),
+                        Err(error) => format!("Download failed: {error}"),
+                    };
                     let message = self.video_status.clone();
                     self.notify(message);
                     self.video_stopping = false;
