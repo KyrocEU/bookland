@@ -62,6 +62,8 @@ open Bookland.app
 
 To keep Bookland running after login, enable **Settings → General → Launch at login**. To tune hover behavior, use **Settings → Behavior → Close after the pointer leaves** and its delay slider. The default delay is 550 ms after leaving the island. Right-click the closed strip for Open Nook, Pocket, workspace editing, and Settings.
 
+To create a reusable Pocket conversion, open **Tray → Manage pipelines** in the island (or **Settings → Pocket**), name it, choose a format, and add each step. Save it, then choose **Convert…** on a Pocket file to run it. **Export** creates a shareable `.booklandpipeline` package; **Import pipeline…** installs one. Bookland keeps only the final output in Pocket.
+
 ## Source map
 
 - `src/main.rs`: island state, views, settings, rendering, and event loop.

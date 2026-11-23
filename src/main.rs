@@ -769,6 +769,7 @@ struct DeskApp {
     pipeline_draft_name: String,
     pipeline_draft_steps: Vec<pocket::Action>,
     pipeline_draft_action: pocket::Action,
+    pipeline_editor_open: bool,
     pocket_job: Option<PocketJob>,
     pocket_status: String,
     pocket_activity: Option<(String, bool, Instant)>,
@@ -2320,6 +2321,7 @@ impl DeskApp {
             pipeline_draft_name: String::new(),
             pipeline_draft_steps: Vec::new(),
             pipeline_draft_action: pocket::Action::Webp,
+            pipeline_editor_open: false,
             pocket_job: None,
             pocket_status: String::new(),
             pocket_activity: None,
@@ -4942,6 +4944,111 @@ impl DeskApp {
         });
         if let Some(url) = start { self.start_video_download(&url); }
     }
+    fn pipeline_editor(&mut self, ui: &mut egui::Ui) {
+        section_title(ui, "POCKET PIPELINES");
+        card().show(ui, |ui| {
+            label(ui, "Save a sequence of native file conversions and run it from Pocket. Share it as a .booklandpipeline file.", 12.0, MUTED);
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                label(ui, "Name", 12.0, TEXT);
+                ui.add(egui::TextEdit::singleline(&mut self.pipeline_draft_name)
+                    .hint_text("Photos to WebP").desired_width(220.0));
+            });
+            ui.horizontal(|ui| {
+                egui::ComboBox::from_id_salt("pipeline_draft_action")
+                    .selected_text(if self.pipeline_draft_action == pocket::Action::Zip {
+                        "ZIP"
+                    } else {
+                        pipelines::CONVERSIONS.iter()
+                            .find(|(action, _)| *action == self.pipeline_draft_action)
+                            .map(|(_, title)| *title).unwrap_or("Choose format")
+                    })
+                    .show_ui(ui, |ui| {
+                        for (action, title) in pipelines::CONVERSIONS {
+                            ui.selectable_value(&mut self.pipeline_draft_action,
+                                action, title);
+                        }
+                        ui.selectable_value(&mut self.pipeline_draft_action,
+                            pocket::Action::Zip, "ZIP");
+                    });
+                if ui.add_enabled(pipelines::can_append(&self.pipeline_draft_steps,
+                    self.pipeline_draft_action), egui::Button::new("Add step")).clicked() {
+                    self.pipeline_draft_steps.push(self.pipeline_draft_action);
+                }
+                if ui.add_enabled(!self.pipeline_draft_steps.is_empty(),
+                    egui::Button::new("Remove last")).clicked() {
+                    self.pipeline_draft_steps.pop();
+                }
+            });
+            if !self.pipeline_draft_steps.is_empty() {
+                let draft = pipelines::Pipeline { name: self.pipeline_draft_name.clone(),
+                    steps: self.pipeline_draft_steps.clone() };
+                label(ui, &format!("Steps: {}", draft.summary()), 12.0, TEXT);
+            }
+            if ui.button("Save pipeline").clicked() {
+                let pipeline = pipelines::Pipeline {
+                    name: self.pipeline_draft_name.trim().into(),
+                    steps: self.pipeline_draft_steps.clone(),
+                };
+                match pipeline.validate() {
+                    Err(error) => self.notify(error),
+                    Ok(()) => {
+                        if let Some(existing) = self.pipelines.iter_mut().find(|item|
+                            item.name.eq_ignore_ascii_case(&pipeline.name)) {
+                            *existing = pipeline.clone();
+                        } else if self.pipelines.len() < 20 {
+                            self.pipelines.push(pipeline.clone());
+                        } else {
+                            self.notify("Remove a pipeline before saving another");
+                            return;
+                        }
+                        self.pipeline_draft_name.clear();
+                        self.pipeline_draft_steps.clear();
+                        self.save_data();
+                        self.notify(format!("Saved pipeline: {}", pipeline.name));
+                    }
+                }
+            }
+            if ui.button("Import pipeline…").clicked() {
+                #[cfg(target_os = "macos")]
+                {
+                    let mut buffer = vec![0_u8; 8192];
+                    let length = unsafe { bookland_choose_pocket_file(
+                        buffer.as_mut_ptr().cast(), buffer.len()) };
+                    if length > 0 {
+                        self.install_pipeline(&PathBuf::from(
+                            String::from_utf8_lossy(&buffer[..length]).to_string()));
+                    }
+                }
+            }
+        });
+        for pipeline in self.pipelines.clone() {
+            ui.add_space(5.0);
+            card().show(ui, |ui| {
+                label(ui, &pipeline.name, 14.0, TEXT);
+                label(ui, &pipeline.summary(), 11.0, MUTED);
+                ui.horizontal(|ui| {
+                    if ui.button("Export").clicked() {
+                        if let Some(root) = preferences_path().and_then(|path| path.parent()
+                            .map(|parent| parent.join("Pocket"))) {
+                            match pipelines::export(&pipeline, &root) {
+                                Ok(path) => {
+                                    let _ = Command::new("open").arg("-R").arg(&path).spawn();
+                                    self.notify(format!("Exported {}", path.display()));
+                                }
+                                Err(error) => self.notify(format!("Export failed: {error}")),
+                            }
+                        }
+                    }
+                    if ui.button("Remove").clicked() {
+                        self.pipelines.retain(|item| item.name != pipeline.name);
+                        self.save_data();
+                        self.notify(format!("Removed pipeline: {}", pipeline.name));
+                    }
+                });
+            });
+        }
+    }
     fn tray(&mut self, ui: &mut egui::Ui) {
         if !self.prefs.show_extra_workspaces && small_button(ui, "Clipboard history").clicked() {
             self.workspace = Workspace::Clipboard;
@@ -4981,11 +5088,16 @@ impl DeskApp {
                 ui.add_space(6.0);
                 label(ui, &format!("{} saved pipelines", self.pipelines.len()), 11.0, MUTED);
             }
-            if ui.button("Manage pipelines").clicked() {
-                self.settings_section = "Pocket".into();
-                self.settings_open = true;
+            if ui.button(if self.pipeline_editor_open {
+                "Hide pipelines"
+            } else { "Manage pipelines" }).clicked() {
+                self.pipeline_editor_open = !self.pipeline_editor_open;
             }
         });
+        if self.pipeline_editor_open {
+            ui.add_space(12.0);
+            self.pipeline_editor(ui);
+        }
         ui.add_space(13.0);
         section_title(ui, "RECENT FILES · POCKET");
         if !self.pocket_status.is_empty() { label(ui, &self.pocket_status, 12.0, MUTED); }
@@ -7746,109 +7858,7 @@ impl DeskApp {
                     ui.checkbox(&mut self.prefs.pocket_battery, "Show battery when idle");
                 });
                 ui.add_space(12.0);
-                section_title(ui, "POCKET PIPELINES");
-                card().show(ui, |ui| {
-                    label(ui, "Save a sequence of native file conversions and run it from Pocket. Share it as a .booklandpipeline file.", 12.0, MUTED);
-                    ui.add_space(8.0);
-                    ui.horizontal(|ui| {
-                        label(ui, "Name", 12.0, TEXT);
-                        ui.add(egui::TextEdit::singleline(&mut self.pipeline_draft_name)
-                            .hint_text("Photos to WebP").desired_width(220.0));
-                    });
-                    ui.horizontal(|ui| {
-                        egui::ComboBox::from_id_salt("pipeline_draft_action")
-                            .selected_text(if self.pipeline_draft_action == pocket::Action::Zip {
-                                "ZIP"
-                            } else {
-                                pipelines::CONVERSIONS.iter()
-                                    .find(|(action, _)| *action == self.pipeline_draft_action)
-                                    .map(|(_, title)| *title).unwrap_or("Choose format")
-                            })
-                            .show_ui(ui, |ui| {
-                                for (action, title) in pipelines::CONVERSIONS {
-                                    ui.selectable_value(&mut self.pipeline_draft_action,
-                                        action, title);
-                                }
-                                ui.selectable_value(&mut self.pipeline_draft_action,
-                                    pocket::Action::Zip, "ZIP");
-                            });
-                        if ui.add_enabled(pipelines::can_append(&self.pipeline_draft_steps,
-                            self.pipeline_draft_action), egui::Button::new("Add step")).clicked() {
-                            self.pipeline_draft_steps.push(self.pipeline_draft_action);
-                        }
-                        if ui.add_enabled(!self.pipeline_draft_steps.is_empty(),
-                            egui::Button::new("Remove last")).clicked() {
-                            self.pipeline_draft_steps.pop();
-                        }
-                    });
-                    if !self.pipeline_draft_steps.is_empty() {
-                        let draft = pipelines::Pipeline { name: self.pipeline_draft_name.clone(),
-                            steps: self.pipeline_draft_steps.clone() };
-                        label(ui, &format!("Steps: {}", draft.summary()), 12.0, TEXT);
-                    }
-                    if ui.button("Save pipeline").clicked() {
-                        let pipeline = pipelines::Pipeline {
-                            name: self.pipeline_draft_name.trim().into(),
-                            steps: self.pipeline_draft_steps.clone(),
-                        };
-                        match pipeline.validate() {
-                            Err(error) => self.notify(error),
-                            Ok(()) => {
-                                if let Some(existing) = self.pipelines.iter_mut().find(|item|
-                                    item.name.eq_ignore_ascii_case(&pipeline.name)) {
-                                    *existing = pipeline.clone();
-                                } else if self.pipelines.len() < 20 {
-                                    self.pipelines.push(pipeline.clone());
-                                } else {
-                                    self.notify("Remove a pipeline before saving another");
-                                    return;
-                                }
-                                self.pipeline_draft_name.clear();
-                                self.pipeline_draft_steps.clear();
-                                self.save_data();
-                                self.notify(format!("Saved pipeline: {}", pipeline.name));
-                            }
-                        }
-                    }
-                    if ui.button("Import pipeline…").clicked() {
-                        #[cfg(target_os = "macos")]
-                        {
-                            let mut buffer = vec![0_u8; 8192];
-                            let length = unsafe { bookland_choose_pocket_file(
-                                buffer.as_mut_ptr().cast(), buffer.len()) };
-                            if length > 0 {
-                                self.install_pipeline(&PathBuf::from(
-                                    String::from_utf8_lossy(&buffer[..length]).to_string()));
-                            }
-                        }
-                    }
-                });
-                for pipeline in self.pipelines.clone() {
-                    ui.add_space(5.0);
-                    card().show(ui, |ui| {
-                        label(ui, &pipeline.name, 14.0, TEXT);
-                        label(ui, &pipeline.summary(), 11.0, MUTED);
-                        ui.horizontal(|ui| {
-                            if ui.button("Export").clicked() {
-                                if let Some(root) = preferences_path().and_then(|path| path.parent()
-                                    .map(|parent| parent.join("Pocket"))) {
-                                    match pipelines::export(&pipeline, &root) {
-                                        Ok(path) => {
-                                            let _ = Command::new("open").arg("-R").arg(&path).spawn();
-                                            self.notify(format!("Exported {}", path.display()));
-                                        }
-                                        Err(error) => self.notify(format!("Export failed: {error}")),
-                                    }
-                                }
-                            }
-                            if ui.button("Remove").clicked() {
-                                self.pipelines.retain(|item| item.name != pipeline.name);
-                                self.save_data();
-                                self.notify(format!("Removed pipeline: {}", pipeline.name));
-                            }
-                        });
-                    });
-                }
+                self.pipeline_editor(ui);
             }
             "Live Activities" => {
                 card().show(ui, |ui| {
