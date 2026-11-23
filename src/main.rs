@@ -2160,6 +2160,11 @@ impl DeskApp {
                     } else { 315.0 } }
                     else if self.lyrics_open { 385.0 } else { 315.0 });
             }
+            if self.workspace == Workspace::Tray {
+                // Give recent files room above the workspace switcher while
+                // capping the panel; additional files scroll within it.
+                return (585.0, 450.0 + 80.0 * self.files.len().min(3) as f32);
+            }
             if self.workspace != Workspace::Nook {
                 return (585.0, if self.workspace == Workspace::Calendar { 400.0 }
                     else { self.prefs.open_height.clamp(380.0, 500.0) });
@@ -2663,7 +2668,8 @@ impl DeskApp {
         self.pocket_job = Some(PocketJob { source, action, receiver });
         self.pocket_status = match action {
             pocket::Action::Keep => "Keeping a copy…",
-            pocket::Action::Png | pocket::Action::Jpeg => "Converting image…",
+            pocket::Action::Png | pocket::Action::Jpeg |
+            pocket::Action::Heic | pocket::Action::Tiff => "Converting image…",
             pocket::Action::Zip => "Creating ZIP…",
         }.into();
     }
@@ -2689,6 +2695,8 @@ impl DeskApp {
                         pocket::Action::Keep => "Saved a copy in Pocket",
                         pocket::Action::Png => "Converted to PNG in Pocket",
                         pocket::Action::Jpeg => "Converted to JPEG in Pocket",
+                        pocket::Action::Heic => "Converted to HEIC in Pocket",
+                        pocket::Action::Tiff => "Converted to TIFF in Pocket",
                         pocket::Action::Zip => "Created ZIP in Pocket",
                     }.into();
                     self.notify(self.pocket_status.clone());
@@ -4902,13 +4910,19 @@ impl DeskApp {
                         self.start_pocket_action(path.clone(), pocket::Action::Keep);
                     }
                     if pocket::can_convert(&path) {
-                        for (label, action) in [("PNG", pocket::Action::Png),
-                            ("JPEG", pocket::Action::Jpeg)] {
-                            if ui.add_enabled(self.pocket_job.is_none(),
-                                egui::Button::new(format!("Convert to {label}"))).clicked() {
-                                self.start_pocket_action(path.clone(), action);
+                        ui.menu_button("Convert…", |ui| {
+                            for (label, action) in [("PNG", pocket::Action::Png),
+                                ("JPEG", pocket::Action::Jpeg),
+                                ("HEIC", pocket::Action::Heic),
+                                ("TIFF", pocket::Action::Tiff)] {
+                                if pocket::can_convert_to(&path, action) &&
+                                    ui.add_enabled(self.pocket_job.is_none(),
+                                        egui::Button::new(label)).clicked() {
+                                    self.start_pocket_action(path.clone(), action);
+                                    ui.close();
+                                }
                             }
-                        }
+                        });
                     }
                     if ui.add_enabled(path.exists() && self.pocket_job.is_none(),
                         egui::Button::new("Create ZIP")).clicked() {
@@ -4974,13 +4988,19 @@ impl DeskApp {
                                     self.start_pocket_action(path.clone(), pocket::Action::Keep);
                                 }
                                 if pocket::can_convert(&path) {
-                                    for (title, action) in [("PNG", pocket::Action::Png),
-                                        ("JPEG", pocket::Action::Jpeg)] {
-                                        if ui.add_enabled(self.pocket_job.is_none(),
-                                            egui::Button::new(format!("Convert to {title}"))).clicked() {
-                                            self.start_pocket_action(path.clone(), action);
+                                    ui.menu_button("Convert…", |ui| {
+                                        for (label, action) in [("PNG", pocket::Action::Png),
+                                            ("JPEG", pocket::Action::Jpeg),
+                                            ("HEIC", pocket::Action::Heic),
+                                            ("TIFF", pocket::Action::Tiff)] {
+                                            if pocket::can_convert_to(&path, action) &&
+                                                ui.add_enabled(self.pocket_job.is_none(),
+                                                    egui::Button::new(label)).clicked() {
+                                                self.start_pocket_action(path.clone(), action);
+                                                ui.close();
+                                            }
                                         }
-                                    }
+                                    });
                                 }
                                 if ui.add_enabled(path.exists() && self.pocket_job.is_none(),
                                     egui::Button::new("Create ZIP")).clicked() {
