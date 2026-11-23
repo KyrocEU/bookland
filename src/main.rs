@@ -2506,7 +2506,7 @@ impl DeskApp {
                 }
                 for (slot, area) in self.glass_rects.iter().enumerate() {
                     let morphing = slot == 0 && self.transition >= 0.82;
-                    let enabled = self.screenshot.is_none()
+                    let enabled = slot != 1 && self.screenshot.is_none()
                         && self.prefs.style == "Glass"
                         && (self.transition >= 0.96 || morphing);
                     if let Some(rect) = area.filter(|_| enabled) {
@@ -5544,7 +5544,8 @@ impl DeskApp {
                                             self.media_action("previous track");
                                         }
                                         if ui.add(egui::Button::new(
-                                            RichText::new("▶").size(22.0).color(Color32::WHITE))
+                                            RichText::new(if self.media_playing { "Ⅱ" } else { "▶" })
+                                                .size(22.0).color(Color32::WHITE))
                                             .frame(false).min_size(Vec2::new(30.0, 27.0)))
                                             .on_hover_text("Play or pause").clicked() {
                                             self.media_action("playpause");
@@ -5872,9 +5873,9 @@ impl DeskApp {
     fn glass_workspace_menu(&mut self, ui: &mut egui::Ui) {
         let workspaces = self.visible_workspaces();
         let menu = Frame::new()
-            .fill(Color32::from_rgba_unmultiplied(12, 16, 23, 35))
+            .fill(Color32::from_rgb(10, 11, 14))
             .corner_radius(16)
-            .stroke(Stroke::new(0.7, Color32::from_rgba_unmultiplied(216, 231, 249, 80)))
+            .stroke(Stroke::new(0.7, Color32::from_rgba_unmultiplied(216, 231, 249, 90)))
             .shadow(egui::epaint::Shadow { offset: [0, 5], blur: 17, spread: 0,
                 color: Color32::from_rgba_unmultiplied(0, 5, 16, 92) })
             .inner_margin(Margin::symmetric(3, 1))
@@ -5888,7 +5889,7 @@ impl DeskApp {
                             "Bookland"
                         } else { workspace.name() };
                         let response = ui.add(egui::Button::new("")
-                            .fill(if active { Color32::from_rgba_unmultiplied(147, 174, 206, 74) }
+                            .fill(if active { Color32::from_rgb(57, 58, 62) }
                                 else { Color32::TRANSPARENT })
                             .corner_radius(17).min_size(Vec2::new(if labeled { 96.0 } else { 30.0 }, 29.0)))
                             .on_hover_text(menu_name);
