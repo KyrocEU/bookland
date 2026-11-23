@@ -5,6 +5,68 @@
 static EKEventStore *nookletEventStore;
 static NSString *nookletEventsJSON;
 
+static NSCalendar *booklandCalendar(void) {
+    NSCalendar *calendar = [NSCalendar calendarWithIdentifier:NSCalendarIdentifierGregorian];
+    calendar.timeZone = NSTimeZone.localTimeZone;
+    return calendar;
+}
+
+int nooklet_calendar_month_index(void) {
+    NSDateComponents *date = [booklandCalendar() components:
+        NSCalendarUnitYear | NSCalendarUnitMonth fromDate:[NSDate date]];
+    return (int)(date.year * 12 + date.month);
+}
+
+size_t nooklet_calendar_month(int offset, char *buffer, size_t capacity) {
+    if (!buffer || capacity == 0) return 0;
+    NSCalendar *calendar = booklandCalendar();
+    NSDateComponents *current = [calendar components:NSCalendarUnitYear | NSCalendarUnitMonth
+        fromDate:[NSDate date]];
+    current.day = 1;
+    NSDateComponents *shift = [NSDateComponents new];
+    shift.month = offset;
+    NSDate *first = [calendar dateByAddingComponents:shift
+        toDate:[calendar dateFromComponents:current] options:0];
+    if (!first) { buffer[0] = '\0'; return 0; }
+    NSDateFormatter *formatter = [NSDateFormatter new];
+    formatter.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+    formatter.timeZone = calendar.timeZone;
+    formatter.dateFormat = @"MMMM yyyy";
+    NSString *title = [formatter stringFromDate:first] ?: @"Calendar";
+    NSInteger weekday = [calendar component:NSCalendarUnitWeekday fromDate:first] - 1;
+    NSInteger days = [calendar rangeOfUnit:NSCalendarUnitDay
+        inUnit:NSCalendarUnitMonth forDate:first].length;
+    NSMutableString *grid = [NSMutableString string];
+    NSInteger left = MAX(0, (22 - (NSInteger)title.length) / 2 - 1);
+    for (NSInteger index = 0; index < left; index++) [grid appendString:@" "];
+    [grid appendString:title];
+    for (NSInteger index = left + title.length; index < 22; index++) [grid appendString:@" "];
+    [grid appendString:@"\nSu Mo Tu We Th Fr Sa  \n"];
+    for (NSInteger row = 0; row < 6; row++) {
+        for (NSInteger column = 0; column < 7; column++) {
+            NSInteger day = row * 7 + column - weekday + 1;
+            if (day >= 1 && day <= days) {
+                [grid appendFormat:@"%2ld ", (long)day];
+            } else {
+                [grid appendString:@"   "];
+            }
+        }
+        [grid appendString:@" \n"];
+    }
+    // The previous Rust run_output() trimmed `cal` before displaying it.
+    // Keep that visible height and first-line alignment exactly the same.
+    NSString *visibleGrid = [grid stringByTrimmingCharactersInSet:
+        NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    NSData *json = [NSJSONSerialization dataWithJSONObject:@{
+        @"title": title, @"grid": visibleGrid
+    } options:0 error:nil];
+    if (!json) { buffer[0] = '\0'; return 0; }
+    size_t copied = MIN(json.length, capacity - 1);
+    memcpy(buffer, json.bytes, copied);
+    buffer[copied] = '\0';
+    return copied;
+}
+
 static EKEventStore *eventStore(void) {
     if (!nookletEventStore) nookletEventStore = [EKEventStore new];
     return nookletEventStore;

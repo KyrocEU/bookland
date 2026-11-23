@@ -77,6 +77,9 @@ unsafe extern "C" {
     fn nooklet_morph_shell_animate(frames: *const NativeMorphFrame, count: usize,
         duration: f64, minimum_width: f64, minimum_height: f64) -> i32;
     fn nooklet_calendar_status() -> i32;
+    fn nooklet_calendar_month_index() -> i32;
+    fn nooklet_calendar_month(offset: i32, buffer: *mut std::ffi::c_char,
+        capacity: usize) -> usize;
     fn nooklet_calendar_connect();
     fn nooklet_calendar_refresh();
     fn nooklet_calendar_copy(buffer: *mut std::ffi::c_char, capacity: usize) -> usize;
@@ -144,6 +147,47 @@ struct CalendarEvent {
     all_day: bool,
     #[serde(default)]
     display_time: String,
+}
+
+#[derive(Default, Deserialize)]
+struct CalendarMonth {
+    title: String,
+    grid: String,
+}
+
+fn load_calendar_month(offset: i32) -> Option<CalendarMonth> {
+    #[cfg(target_os = "macos")]
+    {
+        let mut buffer = [0_u8; 2048];
+        let size = unsafe { nooklet_calendar_month(offset, buffer.as_mut_ptr().cast(), buffer.len()) };
+        (size > 0).then(|| serde_json::from_slice(&buffer[..size]).ok()).flatten()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = offset;
+        None
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod calendar_month_tests {
+    use super::{load_calendar_month, run_output};
+    use std::process::Command;
+
+    #[test]
+    fn native_month_matches_existing_calendar_text() {
+        for offset in [-1, 0, 1] {
+            let shift = format!("-v{:+}m", offset);
+            let numerical = run_output("date", &[&shift, "+%m %Y"]).unwrap();
+            let parts: Vec<_> = numerical.split_whitespace().collect();
+            let expected_title = run_output("date", &[&shift, "+%B %Y"]).unwrap();
+            let expected_grid = String::from_utf8(Command::new("cal")
+                .args([parts[0], parts[1]]).output().unwrap().stdout).unwrap();
+            let native = load_calendar_month(offset).unwrap();
+            assert_eq!(native.title, expected_title);
+            assert_eq!(native.grid, expected_grid.trim());
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -798,6 +842,8 @@ struct DeskApp {
     last_craft_poll: Instant,
     calendar_status: i32,
     calendar_events: Vec<CalendarEvent>,
+    calendar_month_key: Option<(i32, i32)>,
+    calendar_month: CalendarMonth,
     last_calendar_poll: Instant,
     new_event_title: String,
     new_event_date: String,
@@ -2298,6 +2344,8 @@ impl DeskApp {
             last_craft_poll: now - Duration::from_secs(30),
             calendar_status: 0,
             calendar_events: Vec::new(),
+            calendar_month_key: None,
+            calendar_month: CalendarMonth::default(),
             last_calendar_poll: now - Duration::from_secs(35),
             new_event_title: String::new(),
             new_event_date: run_output("date", &["+%Y-%m-%d"]).unwrap_or_default(),
@@ -4359,15 +4407,18 @@ impl DeskApp {
         );
     }
     fn calendar(&mut self, ui: &mut egui::Ui) {
-        let shift = format!(
-            "-v{}{}m",
-            if self.calendar_offset >= 0 { "+" } else { "" },
-            self.calendar_offset
-        );
-        let month_year =
-            run_output("date", &[&shift, "+%B %Y"]).unwrap_or_else(|| "Calendar".into());
-        let numerical = run_output("date", &[&shift, "+%m %Y"]).unwrap_or_default();
-        let parts: Vec<_> = numerical.split_whitespace().collect();
+        #[cfg(target_os = "macos")]
+        let current_month = unsafe { nooklet_calendar_month_index() };
+        #[cfg(not(target_os = "macos"))]
+        let current_month = 0;
+        let key = (current_month, self.calendar_offset);
+        if self.calendar_month_key != Some(key) {
+            self.calendar_month = load_calendar_month(self.calendar_offset).unwrap_or_else(||
+                CalendarMonth { title: "Calendar".into(), grid: "Calendar is unavailable".into() });
+            self.calendar_month_key = Some(key);
+        }
+        let month_year = self.calendar_month.title.clone();
+        let month = self.calendar_month.grid.clone();
         card().show(ui, |ui| {
             ui.horizontal(|ui| {
                 label(ui, &month_year, 20.0, TEXT);
@@ -4381,12 +4432,6 @@ impl DeskApp {
                 });
             });
             ui.add_space(12.0);
-            let month = if parts.len() == 2 {
-                run_output("cal", &[parts[0], parts[1]])
-            } else {
-                None
-            }
-            .unwrap_or_else(|| "Calendar is unavailable".into());
             ui.label(RichText::new(month).monospace().size(15.0).color(TEXT));
         });
         ui.add_space(12.0);
