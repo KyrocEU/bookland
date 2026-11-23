@@ -2672,6 +2672,7 @@ impl DeskApp {
             pocket::Action::Heic | pocket::Action::Tiff |
             pocket::Action::Webp => "Converting image…",
             pocket::Action::Aiff | pocket::Action::Alac => "Converting audio…",
+            pocket::Action::Docx | pocket::Action::Html => "Converting document…",
             pocket::Action::Zip => "Creating ZIP…",
         }.into();
     }
@@ -2702,6 +2703,8 @@ impl DeskApp {
                         pocket::Action::Webp => "Converted to WebP in Pocket",
                         pocket::Action::Aiff => "Converted to AIFF in Pocket",
                         pocket::Action::Alac => "Converted to ALAC in Pocket",
+                        pocket::Action::Docx => "Converted to DOCX in Pocket",
+                        pocket::Action::Html => "Converted to HTML in Pocket",
                         pocket::Action::Zip => "Created ZIP in Pocket",
                     }.into();
                     self.notify(self.pocket_status.clone());
@@ -4922,7 +4925,9 @@ impl DeskApp {
                                 ("TIFF", pocket::Action::Tiff),
                                 ("WebP (lossless)", pocket::Action::Webp),
                                 ("AIFF", pocket::Action::Aiff),
-                                ("ALAC (.m4a)", pocket::Action::Alac)] {
+                                ("ALAC (.m4a)", pocket::Action::Alac),
+                                ("DOCX", pocket::Action::Docx),
+                                ("HTML", pocket::Action::Html)] {
                                 if pocket::can_convert_to(&path, action) &&
                                     ui.add_enabled(self.pocket_job.is_none(),
                                         egui::Button::new(label)).clicked() {
@@ -5003,7 +5008,9 @@ impl DeskApp {
                                             ("TIFF", pocket::Action::Tiff),
                                             ("WebP (lossless)", pocket::Action::Webp),
                                             ("AIFF", pocket::Action::Aiff),
-                                            ("ALAC (.m4a)", pocket::Action::Alac)] {
+                                            ("ALAC (.m4a)", pocket::Action::Alac),
+                                            ("DOCX", pocket::Action::Docx),
+                                            ("HTML", pocket::Action::Html)] {
                                             if pocket::can_convert_to(&path, action) &&
                                                 ui.add_enabled(self.pocket_job.is_none(),
                                                     egui::Button::new(label)).clicked() {

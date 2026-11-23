@@ -1,7 +1,7 @@
 use std::{fs, path::{Path, PathBuf}, process::Command};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Action { Keep, Png, Jpeg, Heic, Tiff, Webp, Aiff, Alac, Zip }
+pub enum Action { Keep, Png, Jpeg, Heic, Tiff, Webp, Aiff, Alac, Docx, Html, Zip }
 
 pub fn is_kept(source: &Path, root: &Path) -> bool {
     source.parent().and_then(|parent| parent.canonicalize().ok())
@@ -13,7 +13,8 @@ pub fn can_convert(source: &Path) -> bool {
         .is_some_and(|extension| matches!(extension.to_ascii_lowercase().as_str(),
             "png" | "jpg" | "jpeg" | "heic" | "heif" | "tif" | "tiff" |
             "webp" | "bmp" | "gif" | "avif" | "wav" | "aif" | "aiff" |
-            "m4a" | "mp3" | "caf" | "flac"))
+            "m4a" | "mp3" | "caf" | "flac" | "txt" | "rtf" | "html" |
+            "htm" | "doc" | "docx" | "odt" | "wordml" | "webarchive"))
 }
 
 pub fn can_convert_to(source: &Path, action: Action) -> bool {
@@ -22,17 +23,25 @@ pub fn can_convert_to(source: &Path, action: Action) -> bool {
         .unwrap_or_default().to_ascii_lowercase();
     let source_is_audio = matches!(extension.as_str(),
         "wav" | "aif" | "aiff" | "m4a" | "mp3" | "caf" | "flac");
+    let source_is_image = matches!(extension.as_str(),
+        "png" | "jpg" | "jpeg" | "heic" | "heif" | "tif" | "tiff" |
+        "webp" | "bmp" | "gif" | "avif");
+    let source_is_document = matches!(extension.as_str(),
+        "txt" | "rtf" | "html" | "htm" | "doc" | "docx" | "odt" |
+        "wordml" | "webarchive");
     match action {
         Action::Aiff => source_is_audio && !matches!(extension.as_str(), "aif" | "aiff"),
         Action::Alac => source_is_audio,
         Action::Png | Action::Jpeg | Action::Heic | Action::Tiff | Action::Webp => {
-            !source_is_audio && !matches!((action, extension.as_str()),
+            source_is_image && !matches!((action, extension.as_str()),
                 (Action::Png, "png") |
                 (Action::Jpeg, "jpg" | "jpeg") |
                 (Action::Heic, "heic" | "heif") |
                 (Action::Tiff, "tif" | "tiff") |
                 (Action::Webp, "webp"))
         }
+        Action::Docx => source_is_document && extension != "docx",
+        Action::Html => source_is_document && !matches!(extension.as_str(), "html" | "htm"),
         Action::Keep | Action::Zip => false,
     }
 }
@@ -99,6 +108,9 @@ fn convert_to_webp(source: &Path, output: &Path) -> Result<(), String> {
 
 pub fn execute(action: Action, source: &Path, root: &Path) -> Result<PathBuf, String> {
     if !source.exists() { return Err("Source file is no longer available".into()); }
+    if !matches!(action, Action::Keep | Action::Zip) && !can_convert_to(source, action) {
+        return Err("This file cannot be converted to that format".into());
+    }
     fs::create_dir_all(root).map_err(|error| error.to_string())?;
     if action == Action::Keep && is_kept(source, root) {
         return Ok(source.to_path_buf());
@@ -111,7 +123,8 @@ pub fn execute(action: Action, source: &Path, root: &Path) -> Result<PathBuf, St
             Action::Jpeg => Some("jpg"), Action::Heic => Some("heic"),
             Action::Tiff => Some("tiff"), Action::Webp => Some("webp"),
             Action::Aiff => Some("aiff"),
-            Action::Alac => Some("m4a"), Action::Zip => unreachable!(),
+            Action::Alac => Some("m4a"), Action::Docx => Some("docx"),
+            Action::Html => Some("html"), Action::Zip => unreachable!(),
         };
         destination(root, source, extension)?
     };
@@ -151,6 +164,12 @@ pub fn execute(action: Action, source: &Path, root: &Path) -> Result<PathBuf, St
             Command::new("/usr/bin/afconvert")
                 .args(["-f", file, "-d", data])
                 .arg(source).arg(&output).output()
+        }
+        Action::Docx | Action::Html => {
+            let format = if action == Action::Docx { "docx" } else { "html" };
+            Command::new("/usr/bin/textutil")
+                .args(["-convert", format, "-noload", "-nostore", "-output"])
+                .arg(&output).arg("--").arg(source).output()
         }
         Action::Webp => unreachable!(),
     }.map_err(|error| error.to_string())?;
@@ -232,6 +251,24 @@ mod tests {
         let from_heic = execute(Action::Webp, &heic, &pocket).unwrap();
         let decoded = image::open(from_heic).unwrap();
         assert_eq!((decoded.width(), decoded.height()), (32, 32));
+    }
+
+    #[test]
+    fn document_conversion_round_trips_text_without_overwriting() {
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("notes.txt");
+        let pocket = temp.path().join("Pocket");
+        fs::write(&source, "Bookland document conversion.\nSecond line.\n").unwrap();
+        let docx = execute(Action::Docx, &source, &pocket).unwrap();
+        assert_eq!(&fs::read(&docx).unwrap()[..2], b"PK");
+        assert!(!can_convert_to(&docx, Action::Docx));
+        let html = execute(Action::Html, &docx, &pocket).unwrap();
+        assert!(fs::read_to_string(&html).unwrap().contains("Bookland document conversion."));
+        let repeated = execute(Action::Html, &docx, &pocket).unwrap();
+        assert_ne!(html, repeated);
+        assert!(source.exists());
+        assert!(!can_convert_to(&html, Action::Html));
+        assert!(!can_convert_to(&source, Action::Webp));
     }
 
     #[test]
