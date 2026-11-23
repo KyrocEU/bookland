@@ -6,14 +6,14 @@ The current build has a working hover island; system media playback, seeking, an
 
 **Before I release it, what would make this genuinely useful on your Mac?** I’m especially interested in which features you would use every day, what should stay out of a small island, and what needs to feel faster or simpler.
 
-Some parts are built but still need a proper demo or wider testing: Apple Music and Spotify playback, AirPlay switching, shuffle and synced lyric timing; Calendar permissions and event creation; the camera Mirror, connected AirPods batteries, voice-following Prompter, and Apple Notes export; plus the full video-download flow and real file-drag gestures.
+Some parts are built but still need a proper demo or wider testing: Apple Music and Spotify playback, AirPlay switching, shuffle and synced lyric timing; Calendar permissions and event creation; the camera Mirror, connected AirPods batteries, voice-following Prompter, and Apple Notes export; plus the new native volume card, the full video-download flow, and real file-drag gestures.
 
 Other features are still on the roadmap:
 
 - Music: a true Playing Next list and audio spectrum.
 - Agents: approvals from Codex turns already running in the desktop app, richer Claude Code controls, and more complete agent activity cards.
 - Communication: Messages and WhatsApp conversations, replies, attachments, and voice notes.
-- Mac controls: volume and brightness HUDs, lock-screen activities, AirPods activity in the closed island, and synthetic notches on external displays.
+- Mac controls: a brightness HUD, lock-screen activities, AirPods activity in the closed island, and synthetic notches on external displays.
 - Workflows: video previews, multiple concurrent transfers, and Pipelines.
 - Polish: matching the reference hover motion and glass appearance across different wallpapers, displays, and macOS configurations while keeping CPU and GPU use low.
 

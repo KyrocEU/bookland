@@ -11,6 +11,7 @@ fn main() {
             .file("src/clipboard.m")
             .file("src/prompter_speech.m")
             .file("src/mirror.m")
+            .file("src/volume_hud.m")
             .flag("-fobjc-arc")
             .flag("-mmacosx-version-min=26.0")
             .compile("nooklet_glass");
@@ -20,6 +21,7 @@ fn main() {
         println!("cargo:rustc-link-lib=framework=Carbon");
         println!("cargo:rustc-link-lib=framework=AVFoundation");
         println!("cargo:rustc-link-lib=framework=CoreMedia");
+        println!("cargo:rustc-link-lib=framework=CoreAudio");
         println!("cargo:rustc-link-lib=framework=Speech");
         println!("cargo:rerun-if-changed=src/glass.m");
         println!("cargo:rerun-if-changed=src/calendar.m");
@@ -30,5 +32,6 @@ fn main() {
         println!("cargo:rerun-if-changed=src/clipboard.m");
         println!("cargo:rerun-if-changed=src/prompter_speech.m");
         println!("cargo:rerun-if-changed=src/mirror.m");
+        println!("cargo:rerun-if-changed=src/volume_hud.m");
     }
 }

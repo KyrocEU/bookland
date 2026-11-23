@@ -54,6 +54,7 @@ unsafe extern "C" {
     fn nooklet_reduce_motion() -> i32;
     fn nooklet_physical_notch(width: *mut f64, height: *mut f64) -> i32;
     fn nooklet_progress_ring_set(enabled: i32, x: f64, y: f64);
+    fn bookland_volume_hud_set(enabled: i32);
     fn bookland_scroll_take(delta_x: *mut f64, delta_y: *mut f64) -> i32;
     fn bookland_haptic_feedback();
     fn nooklet_hover_monitor_set(enabled: i32, context: *mut std::ffi::c_void,
@@ -462,6 +463,7 @@ struct Preferences {
     pocket_battery: bool,
     pocket_shake: bool,
     notify_timer: bool,
+    volume_hud: bool,
     todos: Vec<TodoItem>,
 }
 impl Default for Preferences {
@@ -533,6 +535,7 @@ impl Default for Preferences {
             pocket_battery: false,
             pocket_shake: true,
             notify_timer: true,
+            volume_hud: true,
             todos: Vec::new(),
         }
     }
@@ -604,6 +607,7 @@ struct DeskApp {
     pocket_opened_from_drag: bool,
     pocket_monitor_enabled: bool,
     hover_monitor_enabled: bool,
+    volume_hud_monitor_enabled: bool,
     pocket_wake_context: Box<egui::Context>,
     notes: String,
     note_export_rx: Option<std::sync::mpsc::Receiver<Result<(), String>>>,
@@ -2002,6 +2006,7 @@ impl DeskApp {
             pocket_opened_from_drag: false,
             pocket_monitor_enabled: false,
             hover_monitor_enabled: false,
+            volume_hud_monitor_enabled: false,
             pocket_wake_context: Box::new(repaint_context),
             notes: data.notes,
             note_export_rx: None,
@@ -2154,6 +2159,12 @@ impl DeskApp {
                     nooklet_hover_monitor_set(hover_wanted as i32, context,
                         hover_wanted.then_some(bookland_pocket_wake));
                     self.hover_monitor_enabled = hover_wanted;
+                }
+                let volume_hud_wanted = self.prefs.volume_hud
+                    && self.screenshot.is_none() && !self.preview_mode;
+                if volume_hud_wanted != self.volume_hud_monitor_enabled {
+                    bookland_volume_hud_set(volume_hud_wanted as i32);
+                    self.volume_hud_monitor_enabled = volume_hud_wanted;
                 }
                 for (slot, area) in self.glass_rects.iter().enumerate() {
                     let morphing = slot == 0 && self.transition >= 0.82;
@@ -6783,6 +6794,8 @@ impl DeskApp {
             "Live Activities" => {
                 card().show(ui, |ui| {
                     ui.checkbox(&mut self.prefs.notify_timer, "Notify when Pomodoro finishes");
+                    ui.checkbox(&mut self.prefs.volume_hud,
+                        "Show a Liquid Glass volume card below the notch");
                     label(ui, "The running timer and current track can appear in the closed island. Configure that in Pocket.", 12.0, MUTED);
                 });
             }

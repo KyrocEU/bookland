@@ -18,6 +18,7 @@ Bookland is an independent project inspired by the hover island in NotchNook. It
 | Clipboard | Searchable text, link, color, image, and Finder-file cards with favorites and privacy controls. Optional local persistence excludes image payloads. |
 | Agents | Recent local Codex, Claude Code, and optional external activity feed; task progress, usage information when available, and a compact decision view for Bookland-connected Codex turns. |
 | Prompts and Prompter | An editable spreadsheet-chat prompt builder and a script prompter with scroll or voice-following modes. Both can be added to the island menu. |
+| Live Activities | Timer completion cue and an optional native Liquid Glass volume card. Core Audio change events trigger the card, and Core Animation animates its fill and fade without idle polling. |
 
 The default Glass Nook is a single wide row. Music, Calendar, Tray, and the optional workspaces open as compact top-edge panels. The Agents hover panel uses a compact Progress/Usage layout. Its activity bubble opens the Codex app for ordinary desktop tasks; if a Bookland-connected turn asks for a decision, the bubble opens that request inside the same island. On Macs with a camera notch, the closed strip measures the cutout and leaves space for its status symbols on either side.
 
@@ -67,7 +68,7 @@ The editable Bookland logo, app icon, banner, and GitHub social preview are in [
 
 ## Current limits
 
-This is a working preview with gaps. AirPlay route changes, real AirPods battery display, physical trackpad haptics, live microphone-following, and some permission-dependent flows have not been verified end to end on every Mac. The hover island and major workspaces have been exercised in the signed app, but macOS 26 compatibility and use of private media APIs can vary by system version. Open issues or contribute test results with the exact macOS version and hardware model.
+This is a working preview with gaps. AirPlay route changes, real AirPods battery display, physical trackpad haptics, live microphone-following, the new volume card's on-screen appearance, and some permission-dependent flows have not been verified end to end on every Mac. Brightness HUD replacement is not implemented. The hover island and major workspaces have been exercised in the signed app, but macOS 26 compatibility and use of private media APIs can vary by system version. Open issues or contribute test results with the exact macOS version and hardware model.
 
 ## License
 
