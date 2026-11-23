@@ -2671,7 +2671,8 @@ impl DeskApp {
             pocket::Action::Png | pocket::Action::Jpeg |
             pocket::Action::Heic | pocket::Action::Tiff |
             pocket::Action::Webp => "Converting image…",
-            pocket::Action::Aiff | pocket::Action::Alac => "Converting audio…",
+            pocket::Action::Aiff | pocket::Action::Alac |
+            pocket::Action::Flac => "Converting audio…",
             pocket::Action::Docx | pocket::Action::Html => "Converting document…",
             pocket::Action::Zip => "Creating ZIP…",
         }.into();
@@ -2703,6 +2704,7 @@ impl DeskApp {
                         pocket::Action::Webp => "Converted to WebP in Pocket",
                         pocket::Action::Aiff => "Converted to AIFF in Pocket",
                         pocket::Action::Alac => "Converted to ALAC in Pocket",
+                        pocket::Action::Flac => "Converted to FLAC in Pocket",
                         pocket::Action::Docx => "Converted to DOCX in Pocket",
                         pocket::Action::Html => "Converted to HTML in Pocket",
                         pocket::Action::Zip => "Created ZIP in Pocket",
@@ -4926,6 +4928,7 @@ impl DeskApp {
                                 ("WebP (lossless)", pocket::Action::Webp),
                                 ("AIFF", pocket::Action::Aiff),
                                 ("ALAC (.m4a)", pocket::Action::Alac),
+                                ("FLAC", pocket::Action::Flac),
                                 ("DOCX", pocket::Action::Docx),
                                 ("HTML", pocket::Action::Html)] {
                                 if pocket::can_convert_to(&path, action) &&
@@ -5009,6 +5012,7 @@ impl DeskApp {
                                             ("WebP (lossless)", pocket::Action::Webp),
                                             ("AIFF", pocket::Action::Aiff),
                                             ("ALAC (.m4a)", pocket::Action::Alac),
+                                            ("FLAC", pocket::Action::Flac),
                                             ("DOCX", pocket::Action::Docx),
                                             ("HTML", pocket::Action::Html)] {
                                             if pocket::can_convert_to(&path, action) &&

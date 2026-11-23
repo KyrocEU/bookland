@@ -1,7 +1,7 @@
-use std::{fs, path::{Path, PathBuf}, process::Command};
+use std::{fs, io::Read, path::{Path, PathBuf}, process::Command};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Action { Keep, Png, Jpeg, Heic, Tiff, Webp, Aiff, Alac, Docx, Html, Zip }
+pub enum Action { Keep, Png, Jpeg, Heic, Tiff, Webp, Aiff, Alac, Flac, Docx, Html, Zip }
 
 pub fn is_kept(source: &Path, root: &Path) -> bool {
     source.parent().and_then(|parent| parent.canonicalize().ok())
@@ -32,6 +32,7 @@ pub fn can_convert_to(source: &Path, action: Action) -> bool {
     match action {
         Action::Aiff => source_is_audio && !matches!(extension.as_str(), "aif" | "aiff"),
         Action::Alac => source_is_audio,
+        Action::Flac => source_is_audio && extension != "flac",
         Action::Png | Action::Jpeg | Action::Heic | Action::Tiff | Action::Webp => {
             source_is_image && !matches!((action, extension.as_str()),
                 (Action::Png, "png") |
@@ -123,7 +124,8 @@ pub fn execute(action: Action, source: &Path, root: &Path) -> Result<PathBuf, St
             Action::Jpeg => Some("jpg"), Action::Heic => Some("heic"),
             Action::Tiff => Some("tiff"), Action::Webp => Some("webp"),
             Action::Aiff => Some("aiff"),
-            Action::Alac => Some("m4a"), Action::Docx => Some("docx"),
+            Action::Alac => Some("m4a"), Action::Flac => Some("flac"),
+            Action::Docx => Some("docx"),
             Action::Html => Some("html"), Action::Zip => unreachable!(),
         };
         destination(root, source, extension)?
@@ -154,13 +156,15 @@ pub fn execute(action: Action, source: &Path, root: &Path) -> Result<PathBuf, St
             Command::new("/usr/bin/sips").args(["-s", "format", format])
                 .arg(source).arg("--out").arg(&output).output()
         }
-        Action::Aiff | Action::Alac => {
-            if !can_convert_to(source, action) {
-                return Err("This audio file cannot be converted to that format".into());
-            }
-            let (file, data) = if action == Action::Aiff {
-                ("AIFF", "BEI16")
-            } else { ("m4af", "alac") };
+        Action::Aiff | Action::Alac | Action::Flac => {
+            let (file, data) = match action {
+                Action::Aiff => ("AIFF", "BEI16"),
+                Action::Alac => ("m4af", "alac"),
+                // The default 4608-frame FLAC blocks produce a 42-byte invalid
+                // file for sub-105ms clips on this macOS release.
+                Action::Flac => ("flac", "flac#1024"),
+                _ => unreachable!(),
+            };
             Command::new("/usr/bin/afconvert")
                 .args(["-f", file, "-d", data])
                 .arg(source).arg(&output).output()
@@ -178,6 +182,17 @@ pub fn execute(action: Action, source: &Path, root: &Path) -> Result<PathBuf, St
         let detail = String::from_utf8_lossy(&result.stderr);
         return Err(detail.lines().rev().find(|line| !line.trim().is_empty())
             .unwrap_or("File operation failed").chars().take(180).collect());
+    }
+    if action == Action::Flac {
+        let valid_header = fs::File::open(&output).and_then(|mut file| {
+            let mut header = [0_u8; 4];
+            file.read_exact(&mut header)?;
+            Ok(header == *b"fLaC")
+        }).unwrap_or(false);
+        if !valid_header {
+            let _ = fs::remove_file(&output);
+            return Err("macOS did not create a valid FLAC file".into());
+        }
     }
     Ok(output)
 }
@@ -272,7 +287,7 @@ mod tests {
     }
 
     #[test]
-    fn audio_conversion_writes_aiff_and_alac() {
+    fn audio_conversion_writes_aiff_alac_and_flac() {
         let temp = tempfile::tempdir().unwrap();
         let source = temp.path().join("sample.wav");
         let pocket = temp.path().join("Pocket");
@@ -293,13 +308,17 @@ mod tests {
         wav.extend_from_slice(&samples);
         fs::write(&source, wav).unwrap();
         for (action, extension, codec) in [(Action::Aiff, "aiff", "AIFF"),
-            (Action::Alac, "m4a", "alac")] {
+            (Action::Alac, "m4a", "alac"), (Action::Flac, "flac", "flac")] {
             assert!(can_convert_to(&source, action));
             let output = execute(action, &source, &pocket).unwrap();
             assert_eq!(output.extension().and_then(|value| value.to_str()), Some(extension));
             let info = Command::new("/usr/bin/afinfo").arg(&output).output().unwrap();
             assert!(info.status.success());
             assert!(String::from_utf8_lossy(&info.stdout).contains(codec));
+            if action == Action::Flac {
+                assert_eq!(&fs::read(&output).unwrap()[..4], b"fLaC");
+                assert!(!can_convert_to(&output, Action::Flac));
+            }
         }
         assert!(!can_convert_to(&source, Action::Heic));
     }
