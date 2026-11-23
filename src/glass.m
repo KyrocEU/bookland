@@ -1,5 +1,6 @@
 #import <AppKit/AppKit.h>
 #import <QuartzCore/QuartzCore.h>
+#import <os/log.h>
 
 // Keep winit's content view untouched: it owns keyboard and IME state.
 // A non-interactive child window carries native glass behind its transparent pixels.
@@ -9,6 +10,7 @@ static NSWindow *nookletHostWindow;
 static NSWindow *nookletGlassWindow;
 static NSView *nookletMorphView;
 static CAShapeLayer *nookletMorphLayer;
+static BOOL nookletMorphAnimating;
 static NSWindow *nookletProgressWindow;
 static CAShapeLayer *nookletProgressTrack;
 static CAShapeLayer *nookletProgressArc;
@@ -68,6 +70,15 @@ int nooklet_animation_clock_set(int enabled, void *context, void (*wake)(void *)
     booklandAnimationWake = wake;
     booklandAnimationLink.paused = NO;
     return 1;
+}
+
+void nooklet_animation_clock_rate(int fps) {
+    if (!booklandAnimationLink) return;
+    static int currentRate = 60;
+    int rate = fps <= 30 ? 30 : 60;
+    if (rate == currentRate) return;
+    booklandAnimationLink.preferredFrameRateRange = CAFrameRateRangeMake(rate, rate, rate);
+    currentRate = rate;
 }
 
 int nooklet_reduce_motion(void) {
@@ -308,11 +319,92 @@ void nooklet_set_glass(int slot, double x, double y, double width, double height
     [CATransaction commit];
 }
 
+typedef struct {
+    double x, y, width, height, top_radius, bottom_radius, opacity;
+} BooklandMorphFrame;
+
+static CGPathRef booklandMorphPath(BooklandMorphFrame frame, CGFloat containerHeight) {
+    CGFloat x = frame.x, w = frame.width, h = frame.height;
+    CGFloat y = containerHeight - frame.y - h;
+    CGFloat top = fmax(0, fmin(frame.top_radius, fmin(w, h) * 0.5));
+    CGFloat bottom = fmax(0, fmin(frame.bottom_radius, fmin(w, h) * 0.5));
+    CGMutablePathRef path = CGPathCreateMutable();
+    CGPathMoveToPoint(path, NULL, x + top, y + h);
+    CGPathAddLineToPoint(path, NULL, x + w - top, y + h);
+    CGPathAddQuadCurveToPoint(path, NULL, x + w, y + h, x + w, y + h - top);
+    CGPathAddLineToPoint(path, NULL, x + w, y + bottom);
+    CGPathAddQuadCurveToPoint(path, NULL, x + w, y, x + w - bottom, y);
+    CGPathAddLineToPoint(path, NULL, x + bottom, y);
+    CGPathAddQuadCurveToPoint(path, NULL, x, y, x, y + bottom);
+    CGPathAddLineToPoint(path, NULL, x, y + h - top);
+    CGPathAddQuadCurveToPoint(path, NULL, x, y + h, x + top, y + h);
+    CGPathCloseSubpath(path);
+    return path;
+}
+
+int nooklet_morph_shell_animate(const BooklandMorphFrame *frames, size_t count,
+                               double duration, double minimumWidth,
+                               double minimumHeight) {
+    if (!nookletMorphView || !nookletMorphLayer || !frames || count < 2) return 0;
+    if (!NSEqualRects(nookletGlassWindow.frame, nookletHostWindow.frame)) {
+        [nookletGlassWindow setFrame:nookletHostWindow.frame display:NO];
+    }
+    nookletMorphView.frame = nookletContainer.bounds;
+    NSSize size = nookletMorphView.bounds.size;
+    if (size.width < minimumWidth || size.height < minimumHeight) return 0;
+    CAShapeLayer *presented = (CAShapeLayer *)nookletMorphLayer.presentationLayer;
+    CGPathRef previous = nookletMorphAnimating && presented.path
+        ? CGPathCreateCopy(presented.path) : NULL;
+    float previousOpacity = nookletMorphAnimating ? presented.opacity : 0;
+    NSMutableArray *paths = [NSMutableArray arrayWithCapacity:count];
+    NSMutableArray<NSNumber *> *opacities = [NSMutableArray arrayWithCapacity:count];
+    for (size_t index = 0; index < count; index++) {
+        CGPathRef path = index == 0 && previous ? CGPathCreateCopy(previous)
+            : booklandMorphPath(frames[index], size.height);
+        [paths addObject:(__bridge id)path];
+        [opacities addObject:@(index == 0 && previous
+            ? previousOpacity : frames[index].opacity)];
+        CGPathRelease(path);
+    }
+    if (previous) CGPathRelease(previous);
+    CAKeyframeAnimation *shape = [CAKeyframeAnimation animationWithKeyPath:@"path"];
+    shape.values = paths;
+    shape.calculationMode = kCAAnimationLinear;
+    shape.duration = duration;
+    CAKeyframeAnimation *fade = [CAKeyframeAnimation animationWithKeyPath:@"opacity"];
+    fade.values = opacities;
+    fade.calculationMode = kCAAnimationLinear;
+    fade.duration = duration;
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    [nookletMorphLayer removeAllAnimations];
+    nookletMorphLayer.frame = nookletMorphView.bounds;
+    nookletMorphLayer.path = (__bridge CGPathRef)paths.lastObject;
+    nookletMorphLayer.opacity = (float)frames[count - 1].opacity;
+    nookletMorphView.hidden = NO;
+    [nookletMorphLayer addAnimation:shape forKey:@"booklandMorphPath"];
+    [nookletMorphLayer addAnimation:fade forKey:@"booklandMorphOpacity"];
+    [CATransaction commit];
+    nookletMorphAnimating = YES;
+    os_log_debug(OS_LOG_DEFAULT, "Bookland native morph started (%zu frames)", count);
+    return 1;
+}
+
 void nooklet_morph_shell_set(int enabled, double x, double y, double width,
                             double height, double topRadius, double bottomRadius,
                             double opacity) {
     if (!nookletMorphView || !nookletMorphLayer) return;
-    if (!enabled || width <= 0 || height <= 0 || opacity <= 0) {
+    if (!enabled) {
+        [nookletMorphLayer removeAllAnimations];
+        nookletMorphAnimating = NO;
+        nookletMorphView.hidden = YES;
+        return;
+    }
+    if (nookletMorphAnimating) {
+        nookletMorphView.hidden = NO;
+        return;
+    }
+    if (width <= 0 || height <= 0 || opacity <= 0) {
         nookletMorphView.hidden = YES;
         return;
     }

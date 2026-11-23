@@ -66,12 +66,15 @@ unsafe extern "C" {
         wake: Option<extern "C" fn(*mut std::ffi::c_void)>);
     fn nooklet_animation_clock_set(enabled: i32, context: *mut std::ffi::c_void,
         wake: Option<extern "C" fn(*mut std::ffi::c_void)>) -> i32;
+    fn nooklet_animation_clock_rate(fps: i32);
     fn nooklet_set_glass(
         slot: i32, x: f64, y: f64, width: f64, height: f64,
         radius: f64, level: f64, opacity: f64, enabled: i32,
     );
     fn nooklet_morph_shell_set(enabled: i32, x: f64, y: f64, width: f64,
         height: f64, top_radius: f64, bottom_radius: f64, opacity: f64);
+    fn nooklet_morph_shell_animate(frames: *const NativeMorphFrame, count: usize,
+        duration: f64, minimum_width: f64, minimum_height: f64) -> i32;
     fn nooklet_calendar_status() -> i32;
     fn nooklet_calendar_connect();
     fn nooklet_calendar_refresh();
@@ -570,6 +573,8 @@ struct DeskApp {
     transition: f32,
     transition_velocity: f32,
     animation_target_expanded: bool,
+    native_morph_pending: bool,
+    native_morph_animating: bool,
     last_frame: Instant,
     last_hovered: Instant,
     hover_opened_at: Instant,
@@ -1573,10 +1578,59 @@ fn spring_frame_dt(elapsed: Duration, target_changed: bool) -> f32 {
         seconds
     }
 }
+#[repr(C)]
+struct NativeMorphFrame {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    top_radius: f64,
+    bottom_radius: f64,
+    opacity: f64,
+}
+
+fn native_morph_frames(center_x: f32, top_y: f32,
+    closed: (f32, f32), open: (f32, f32),
+    position: f32, velocity: f32, target: f32, omega: f32, damping: f32)
+    -> Vec<NativeMorphFrame> {
+    let mut frames = Vec::with_capacity(61);
+    let (mut position, mut velocity) = (position, velocity);
+    for index in 0..=60 {
+        let progress = position.clamp(0.0, 1.02);
+        let width = egui::lerp(closed.0..=open.0, progress);
+        let height = egui::lerp(closed.1..=open.1, progress);
+        let reveal = ((progress - 0.82) / 0.14).clamp(0.0, 1.0);
+        frames.push(NativeMorphFrame {
+            x: f64::from(center_x - width * 0.5),
+            y: f64::from(top_y),
+            width: f64::from(width),
+            height: f64::from(height),
+            top_radius: f64::from(((1.0 - progress) * 10.0).max(0.0)),
+            bottom_radius: f64::from(17.0 + progress * 12.0),
+            opacity: f64::from(1.0 - reveal),
+        });
+        if index > 1 && (position - target).abs() < 0.005
+            && velocity.abs() < 0.02 { break; }
+        (position, velocity) = spring_step(position, velocity, target,
+            omega, damping, 1.0 / 60.0);
+    }
+    if let Some(last) = frames.last_mut() {
+        let width = egui::lerp(closed.0..=open.0, target);
+        let height = egui::lerp(closed.1..=open.1, target);
+        last.x = f64::from(center_x - width * 0.5);
+        last.width = f64::from(width);
+        last.height = f64::from(height);
+        last.top_radius = f64::from((1.0 - target) * 10.0);
+        last.bottom_radius = f64::from(17.0 + target * 12.0);
+        last.opacity = f64::from(1.0 - ((target - 0.82) / 0.14).clamp(0.0, 1.0));
+    }
+    frames
+}
 #[cfg(test)]
 mod hover_gate_tests {
     use std::time::Duration;
-    use super::{hover_allowed_after_close, hover_close_guard, spring_frame_dt, spring_step};
+    use super::{hover_allowed_after_close, hover_close_guard, native_morph_frames,
+        spring_frame_dt, spring_step};
 
     #[test]
     fn explicit_close_requires_pointer_exit_before_hover_reopens() {
@@ -1616,6 +1670,20 @@ mod hover_gate_tests {
             < f32::EPSILON);
         assert!((spring_frame_dt(Duration::from_millis(30), false) - 0.03).abs()
             < f32::EPSILON);
+    }
+
+    #[test]
+    fn native_morph_samples_preserve_the_top_edge_and_finish_at_the_target() {
+        let frames = native_morph_frames(300.0, 0.0, (255.0, 33.0),
+            (585.0, 230.0), 0.0, 0.0, 1.0,
+            std::f32::consts::TAU / 0.5, 0.82);
+        assert!(frames.len() > 10 && frames.len() <= 61);
+        assert_eq!((frames[0].width, frames[0].height), (255.0, 33.0));
+        assert_eq!((frames.last().unwrap().width, frames.last().unwrap().height),
+            (585.0, 230.0));
+        assert!(frames.iter().all(|frame| frame.y == 0.0));
+        assert_eq!(frames.first().unwrap().opacity, 1.0);
+        assert_eq!(frames.last().unwrap().opacity, 0.0);
     }
 }
 #[cfg(test)]
@@ -1996,6 +2064,8 @@ impl DeskApp {
             transition: if expanded { 1.0 } else { 0.0 },
             transition_velocity: 0.0,
             animation_target_expanded: expanded,
+            native_morph_pending: false,
+            native_morph_animating: false,
             last_frame: now,
             last_hovered: now,
             hover_opened_at: now,
@@ -2246,11 +2316,36 @@ impl DeskApp {
                     }
                 }
                 if let Some((rect, top, bottom, opacity)) = self.native_morph_shell {
+                    if self.native_morph_pending && self.prefs.style == "Glass"
+                        && self.screenshot.is_none() && !self.preview_mode
+                        && !self.clipboard_bottom_sheet {
+                        let (open_width, open_height) = self.open_dimensions();
+                        let frames = native_morph_frames(rect.center().x, rect.min.y,
+                            self.closed_dimensions(), (open_width, open_height),
+                            self.transition, self.transition_velocity, target,
+                            std::f32::consts::TAU
+                                * self.prefs.animation_speed.clamp(0.5, 2.0)
+                                / if nooklet_reduce_motion() != 0 { 0.25 } else { 0.5 },
+                            if nooklet_reduce_motion() != 0 { 1.0 } else { 0.82 });
+                        let duration = (frames.len() - 1) as f64 / 60.0;
+                        if nooklet_morph_shell_animate(frames.as_ptr(), frames.len(), duration,
+                            f64::from(open_width + 30.0),
+                            f64::from(open_height + 60.0)) != 0 {
+                            self.native_morph_pending = false;
+                            self.native_morph_animating = true;
+                        }
+                    }
                     nooklet_morph_shell_set(1, rect.min.x as f64, rect.min.y as f64,
                         rect.width() as f64, rect.height() as f64,
                         top as f64, bottom as f64, opacity as f64);
                 } else {
+                    self.native_morph_pending = false;
+                    self.native_morph_animating = false;
                     nooklet_morph_shell_set(0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+                }
+                if self.animation_clock_enabled {
+                    nooklet_animation_clock_rate(if self.native_morph_animating
+                        && self.transition < 0.82 { 30 } else { 60 });
                 }
             }
         }
@@ -7663,6 +7758,10 @@ impl eframe::App for DeskApp {
         }
         let target_changed = self.expanded != self.animation_target_expanded;
         self.animation_target_expanded = self.expanded;
+        if target_changed {
+            self.native_morph_pending = true;
+            self.native_morph_animating = false;
+        }
         // Start moving on the first frame after a hover event. Zeroing this
         // frame added a full display interval to the apparent hover latency.
         let dt = spring_frame_dt(now.duration_since(self.last_frame), target_changed);
