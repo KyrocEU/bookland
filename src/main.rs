@@ -61,7 +61,8 @@ unsafe extern "C" {
     fn bookland_activity_bubble_show(message: *const std::ffi::c_char, closed_width: f64);
     fn bookland_activity_bubble_hide();
     fn bookland_result_card_show(path: *const std::ffi::c_char,
-        subtitle: *const std::ffi::c_char, seconds: f64);
+        subtitle: *const std::ffi::c_char, seconds: f64, panel_bottom: f64);
+    fn bookland_result_card_position(panel_bottom: f64);
     fn bookland_conversion_card_hide();
     fn bookland_volume_hud_set(enabled: i32);
     fn bookland_system_volume_get() -> f32;
@@ -2573,11 +2574,17 @@ impl DeskApp {
                     bookland_activity_bubble_hide();
                     self.activity_bubble_visible = false;
                 }
-                if (self.expanded || self.prefs.style != "Glass"
+                if (self.prefs.style != "Glass"
                     || self.screenshot.is_some() || self.preview_mode)
                     && self.result_card_visible {
                     bookland_conversion_card_hide();
                     self.result_card_visible = false;
+                }
+                let result_panel_bottom = if self.expanded {
+                    self.glass_rects[0].map(|rect| f64::from(rect.max.y)).unwrap_or(0.0)
+                } else { 0.0 };
+                if self.result_card_visible {
+                    bookland_result_card_position(result_panel_bottom);
                 }
                 if let Some(message) = self.pending_activity_bubble.take() {
                     if !self.expanded && self.prefs.style == "Glass"
@@ -2594,14 +2601,14 @@ impl DeskApp {
                     card.ready_at.elapsed() >= card.lifetime) {
                     self.pending_result_card = None;
                 }
-                if !self.expanded && self.prefs.style == "Glass"
+                if self.prefs.style == "Glass"
                     && self.screenshot.is_none() && !self.preview_mode {
                     if let Some(card) = self.pending_result_card.take() {
                         if let (Ok(path), Ok(subtitle)) = (
                             CString::new(card.path.to_string_lossy().as_bytes()),
                             CString::new(card.subtitle)) {
                             bookland_result_card_show(path.as_ptr(), subtitle.as_ptr(),
-                                card.lifetime.as_secs_f64());
+                                card.lifetime.as_secs_f64(), result_panel_bottom);
                             self.result_card_visible = true;
                         }
                     }

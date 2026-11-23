@@ -889,8 +889,42 @@ void bookland_conversion_card_hide(void) {
         });
 }
 
+static void booklandPositionConversionCard(double panelBottom, BOOL animated) {
+    if (!booklandConversionWindow || !nookletHostWindow) return;
+    NSScreen *screen = nookletHostWindow.screen ?: NSScreen.mainScreen;
+    if (!screen) return;
+    CGFloat width = booklandConversionWindow.frame.size.width;
+    CGFloat height = booklandConversionWindow.frame.size.height;
+    CGFloat inset = fmax(32, screen.safeAreaInsets.top) + 8;
+    if (isfinite(panelBottom) && panelBottom > 0)
+        inset = fmax(inset, panelBottom + 12);
+    CGFloat y = fmax(NSMinY(screen.visibleFrame) + 8,
+                     NSMaxY(screen.frame) - inset - height);
+    NSRect frame = NSMakeRect(NSMidX(screen.frame) - width / 2, y, width, height);
+    NSRect previous = booklandConversionWindow.frame;
+    if (NSEqualRects(previous, frame)) return;
+    [booklandConversionWindow setFrame:frame display:NO];
+    if (animated && booklandConversionWindow.isVisible && !nooklet_reduce_motion()
+        && fabs(previous.origin.y - y) > 4) {
+        CABasicAnimation *move = [CABasicAnimation
+            animationWithKeyPath:@"transform.translation.y"];
+        move.fromValue = @(previous.origin.y - y);
+        move.toValue = @0;
+        move.duration = 0.22;
+        move.timingFunction = [CAMediaTimingFunction
+            functionWithName:kCAMediaTimingFunctionEaseOut];
+        [booklandConversionGlass.layer addAnimation:move forKey:@"booklandConversionMove"];
+    }
+}
+
+void bookland_result_card_position(double panelBottom) {
+    if (booklandConversionWindow.isVisible)
+        booklandPositionConversionCard(panelBottom, YES);
+}
+
 void bookland_result_card_show(const char *utf8Path,
-                               const char *utf8Subtitle, double seconds) {
+                               const char *utf8Subtitle, double seconds,
+                               double panelBottom) {
     if (!utf8Path || !*utf8Path || !nookletHostWindow) return;
     NSString *path = [NSString stringWithUTF8String:utf8Path];
     if (!path.length || ![NSFileManager.defaultManager fileExistsAtPath:path]) return;
@@ -910,11 +944,7 @@ void bookland_result_card_show(const char *utf8Path,
     }
     NSScreen *screen = nookletHostWindow.screen ?: NSScreen.mainScreen;
     if (!screen) return;
-    CGFloat width = booklandConversionWindow.frame.size.width;
-    CGFloat height = booklandConversionWindow.frame.size.height;
-    CGFloat top = NSMaxY(screen.frame) - fmax(32, screen.safeAreaInsets.top) - 8;
-    [booklandConversionWindow setFrame:NSMakeRect(NSMidX(screen.frame) - width / 2,
-        top - height, width, height) display:NO];
+    booklandPositionConversionCard(panelBottom, NO);
     CALayer *layer = booklandConversionGlass.layer;
     [layer removeAllAnimations];
     if (!booklandConversionWindow.isVisible) [booklandConversionWindow orderFront:nil];
