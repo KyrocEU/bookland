@@ -154,6 +154,47 @@ enum Workspace {
     Prompts,
     Prompter,
 }
+
+#[derive(Clone, Copy)]
+struct TourPage {
+    eyebrow: &'static str,
+    title: &'static str,
+    summary: &'static str,
+    detail: &'static str,
+    workspace: Option<Workspace>,
+    settings: &'static str,
+}
+
+const TOUR_PAGES: [TourPage; 7] = [
+    TourPage { eyebrow: "WELCOME", title: "A little more room at the top.",
+        summary: "Bookland lives around your Mac's camera cutout. Hover over the island to open it; move away to close it.",
+        detail: "Click the island when you want it to stay open. Press Escape to close it again.",
+        workspace: Some(Workspace::Nook), settings: "General" },
+    TourPage { eyebrow: "NOOK", title: "The things you reach for most.",
+        summary: "See the current song, live Mac readings, a Focus timer, and your to-dos in one glance.",
+        detail: "Choose and reorder Nook widgets in Settings. Your workspace stays at the top edge.",
+        workspace: Some(Workspace::Nook), settings: "Nook" },
+    TourPage { eyebrow: "MUSIC", title: "Keep the music close.",
+        summary: "Play, pause, skip, and scrub the current Mac media session without switching windows.",
+        detail: "Lyrics appear when a synced match is available. AirPlay routes are available for Apple Music.",
+        workspace: Some(Workspace::Music), settings: "Music" },
+    TourPage { eyebrow: "POCKET + CLIPBOARD", title: "Keep what you need nearby.",
+        summary: "Search recent copied items, then drop files into Pocket for a quick copy or conversion.",
+        detail: "Clipboard capture and its privacy controls are configurable in Settings.",
+        workspace: Some(Workspace::Clipboard), settings: "Clipboard" },
+    TourPage { eyebrow: "PLAN + PRESENT", title: "Make room for the next task.",
+        summary: "Check upcoming calendar events, keep a script near the camera, or run a Focus timer.",
+        detail: "Calendar and voice following ask for macOS permission only when you use them.",
+        workspace: Some(Workspace::Prompter), settings: "Prompter" },
+    TourPage { eyebrow: "AGENTS", title: "See Codex at work.",
+        summary: "Follow local Codex activity and open a connected chat from the island.",
+        detail: "For turns started through Bookland, approval requests and questions can be answered here.",
+        workspace: Some(Workspace::Agents), settings: "Agents" },
+    TourPage { eyebrow: "MAKE IT YOURS", title: "Set the island your way.",
+        summary: "Choose Glass or Classic, tune the motion, and arrange the controls that belong in your Nook.",
+        detail: "Start with the Appearance settings, then come back any time to replay this tour.",
+        workspace: None, settings: "Appearance" },
+];
 impl Workspace {
     const ISLAND: [Self; 5] = [
         Self::Nook, Self::Music, Self::Calendar, Self::Tray, Self::Agents,
@@ -559,6 +600,7 @@ struct DeskApp {
     workspace_chosen_by_user: bool,
     settings_open: bool,
     settings_section: String,
+    tour_step: Option<usize>,
     selected_widget: Widget,
     dragged_widget: Option<Widget>,
     prefs: Preferences,
@@ -2050,6 +2092,7 @@ impl DeskApp {
             workspace_chosen_by_user: false,
             settings_open: false,
             settings_section: "General".into(),
+            tour_step: None,
             selected_widget: Widget::MediaPlayer,
             dragged_widget: None,
             prefs,
@@ -6883,7 +6926,7 @@ impl DeskApp {
                     ui.checkbox(&mut self.prefs.demo_mode, "Demo mode")
                         .on_hover_text("Shows labeled sample activity in the Agents workspace.");
                     if small_button(ui, "Onboarding tour").clicked() {
-                        self.notify("Onboarding tour is not available in this recreation");
+                        self.tour_step = Some(0);
                     }
                 });
             }
@@ -7560,8 +7603,128 @@ impl DeskApp {
                     });
                 });
             });
+        if self.tour_step.is_some() {
+            self.onboarding_tour(ctx);
+        }
         if self.prefs != before {
             self.save_prefs();
+        }
+    }
+    fn onboarding_tour(&mut self, ctx: &egui::Context) {
+        enum Action { Stay, Close, Back, Next, Jump(usize), TryIt }
+        let step = self.tour_step.unwrap_or(0).min(TOUR_PAGES.len() - 1);
+        let page = TOUR_PAGES[step];
+        let mark = self.bookland_mark.clone();
+        let accent = match step {
+            0 | 6 => Color32::from_rgb(129, 169, 255),
+            1 => Color32::from_rgb(123, 218, 181),
+            2 => Color32::from_rgb(185, 150, 255),
+            3 => Color32::from_rgb(244, 182, 119),
+            4 => Color32::from_rgb(122, 205, 231),
+            _ => Color32::from_rgb(167, 144, 247),
+        };
+        let mut action = Action::Stay;
+        egui::Modal::new(egui::Id::new("bookland_onboarding_tour"))
+            .backdrop_color(Color32::from_black_alpha(190))
+            .frame(Frame::new().fill(Color32::from_rgb(21, 23, 29))
+                .stroke(Stroke::new(1.0, Color32::from_rgba_unmultiplied(244, 247, 255, 36)))
+                .corner_radius(24).inner_margin(Margin::same(24))
+                .shadow(egui::epaint::Shadow { offset: [0, 16], blur: 36, spread: 0,
+                    color: Color32::from_black_alpha(120) }))
+            .show(ctx, |ui| {
+                ui.set_width(510.0);
+                ui.horizontal(|ui| {
+                    if let Some(mark) = &mark {
+                        ui.add(egui::Image::from_texture(mark)
+                            .fit_to_exact_size(Vec2::splat(28.0)));
+                    }
+                    ui.label(RichText::new("BOOKLAND").size(14.0).strong().color(TEXT));
+                    ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                        ui.label(RichText::new(format!("{}/{}", step + 1, TOUR_PAGES.len()))
+                            .size(12.0).color(MUTED));
+                    });
+                });
+                ui.add_space(17.0);
+                let (hero, _) = ui.allocate_exact_size(
+                    Vec2::new(ui.available_width(), 132.0), egui::Sense::hover());
+                ui.painter().rect_filled(hero, 19.0, Color32::from_rgb(30, 34, 43));
+                ui.painter().circle_filled(hero.center(), 69.0,
+                    Color32::from_rgba_unmultiplied(accent.r(), accent.g(), accent.b(), 24));
+                let island = egui::Rect::from_center_size(hero.center(), Vec2::new(260.0, 59.0));
+                ui.painter().rect_filled(island, 25.0, Color32::from_rgb(3, 5, 8));
+                if let Some(mark) = &mark {
+                    ui.painter().image(mark.id(), egui::Rect::from_center_size(
+                        island.left_center() + Vec2::new(28.0, 0.0), Vec2::splat(26.0)),
+                        egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
+                        accent);
+                }
+                ui.painter().text(island.center(), Align2::CENTER_CENTER, page.eyebrow,
+                    FontId::proportional(13.0), TEXT);
+                for index in 0..TOUR_PAGES.len() {
+                    ui.painter().circle_filled(
+                        island.right_center() - Vec2::new(40.0 - index as f32 * 5.0, 0.0),
+                        if index == step { 2.3 } else { 1.3 },
+                        if index == step { accent } else { Color32::from_gray(85) },
+                    );
+                }
+                ui.add_space(18.0);
+                ui.label(RichText::new(page.title).size(25.0).strong().color(TEXT));
+                ui.add_space(8.0);
+                ui.label(RichText::new(page.summary).size(14.0).color(TEXT));
+                ui.add_space(10.0);
+                ui.label(RichText::new(page.detail).size(12.0).color(MUTED));
+                ui.add_space(23.0);
+                ui.horizontal(|ui| {
+                    for index in 0..TOUR_PAGES.len() {
+                        let (dot, response) = ui.allocate_exact_size(
+                            Vec2::splat(13.0), egui::Sense::click());
+                        ui.painter().circle_filled(dot.center(), if index == step { 4.5 } else { 3.0 },
+                            if index == step { accent } else { Color32::from_gray(82) });
+                        if response.clicked() { action = Action::Jump(index); }
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                        let next = if step + 1 == TOUR_PAGES.len() { "Done" } else { "Next" };
+                        if ui.add(egui::Button::new(
+                            RichText::new(next).strong().color(Color32::from_rgb(13, 18, 27)))
+                            .fill(accent)
+                            .min_size(Vec2::new(73.0, 31.0))).clicked() {
+                            action = if step + 1 == TOUR_PAGES.len() {
+                                Action::Close
+                            } else { Action::Next };
+                        }
+                        if step > 0 && ui.button("Back").clicked() { action = Action::Back; }
+                        if ui.button("Close").clicked() { action = Action::Close; }
+                    });
+                });
+                ui.add_space(11.0);
+                let try_label = if page.workspace.is_some() {
+                    "Try this in the island ↗"
+                } else { "Open Appearance settings ↗" };
+                if ui.link(try_label).clicked() { action = Action::TryIt; }
+            });
+        if ctx.input(|input| input.key_pressed(egui::Key::Escape)) {
+            action = Action::Close;
+        }
+        match action {
+            Action::Stay => {}
+            Action::Close => self.tour_step = None,
+            Action::Back => self.tour_step = Some(step.saturating_sub(1)),
+            Action::Next => self.tour_step = Some((step + 1).min(TOUR_PAGES.len() - 1)),
+            Action::Jump(index) => self.tour_step = Some(index),
+            Action::TryIt => {
+                self.tour_step = None;
+                self.settings_section = page.settings.into();
+                if let Some(workspace) = page.workspace {
+                    self.workspace = workspace;
+                    self.workspace_chosen_by_user = true;
+                    self.expanded = true;
+                    self.opened_by_hover = false;
+                    self.clipboard_bottom_sheet = false;
+                    self.settings_open = false;
+                    ctx.send_viewport_cmd(ViewportCommand::Close);
+                    self.pocket_wake_context.request_repaint();
+                }
+            }
         }
     }
     fn screenshot_events(&mut self, ctx: &egui::Context) {
@@ -7963,12 +8126,14 @@ impl eframe::App for DeskApp {
                 |settings_ctx, class| {
                     if settings_ctx.input(|i| i.viewport().close_requested()) {
                         self.settings_open = false;
+                        self.tour_step = None;
                         return;
                     }
                     if class == egui::ViewportClass::Embedded {
                         egui::Window::new("Bookland Settings").show(settings_ctx, |ui| {
                             self.settings_content(ui);
                         });
+                        if self.tour_step.is_some() { self.onboarding_tour(settings_ctx); }
                     } else {
                         self.settings_window_ui(settings_ctx);
                     }
