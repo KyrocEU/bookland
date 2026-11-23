@@ -7143,11 +7143,37 @@ impl DeskApp {
         }
     }
     fn settings_nav(&mut self, ui: &mut egui::Ui) {
+        let brand = self.bookland_mark.clone();
+        Frame::new()
+            .fill(Color32::from_rgb(22, 34, 52))
+            .stroke(Stroke::new(1.0, Color32::from_rgb(62, 82, 112)))
+            .corner_radius(13.0)
+            .inner_margin(10.0)
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    let (rect, _) = ui.allocate_exact_size(
+                        Vec2::splat(40.0), egui::Sense::hover());
+                    if let Some(mark) = &brand {
+                        ui.painter().image(mark.id(), rect,
+                            egui::Rect::from_min_max(egui::Pos2::ZERO,
+                                egui::Pos2::new(1.0, 1.0)), Color32::WHITE);
+                    } else {
+                        ui.painter().rect_filled(rect, 10.0,
+                            Color32::from_rgb(37, 66, 106));
+                        ui.painter().text(rect.center(), Align2::CENTER_CENTER,
+                            "B", FontId::proportional(23.0), TEXT);
+                    }
+                    ui.vertical(|ui| {
+                        label(ui, "Bookland", 16.0, TEXT);
+                        label(ui, "A living island for Mac", 10.0,
+                            Color32::from_rgb(161, 187, 221));
+                    });
+                });
+            });
         for (group, items) in [
             (
                 "SETTINGS",
                 vec![
-                    ("Account", "◉"),
                     ("General", "⚙"),
                     ("Appearance", "◐"),
                     ("Displays", "▣"),
@@ -7229,24 +7255,6 @@ impl DeskApp {
         label(ui, &self.settings_section, 24.0, TEXT);
         ui.add_space(5.0);
         match self.settings_section.as_str() {
-            "Account" => {
-                label(ui, "Free trial", 14.0, TEXT);
-                ui.add_space(10.0);
-                card().show(ui, |ui| {
-                    label(
-                        ui,
-                        "This local recreation has no license service.",
-                        13.0,
-                        MUTED,
-                    );
-                    label(
-                        ui,
-                        "License activation is intentionally unavailable.",
-                        12.0,
-                        MUTED,
-                    );
-                });
-            }
             "General" => {
                 section_title(ui, "STARTUP");
                 card().show(ui, |ui| {
@@ -7774,20 +7782,29 @@ impl DeskApp {
                 });
             }
             "About" => {
-                label(ui, "Bookland", 15.0, TEXT);
-                ui.add_space(8.0);
-                label(
-                    ui,
-                    "Built from visible demo observations and original local code.",
-                    12.0,
-                    MUTED,
-                );
-                label(
-                    ui,
-                    "Calendar, Agents, and several settings behaviors remain unverified.",
-                    12.0,
-                    MUTED,
-                );
+                card().show(ui, |ui| {
+                    label(ui, &format!("Bookland {}", env!("CARGO_PKG_VERSION")),
+                        18.0, TEXT);
+                    label(ui, "A living island for your Mac.", 13.0, MUTED);
+                    ui.add_space(8.0);
+                    label(ui, "An independent open-source macOS app inspired by the hover island in NotchNook. Built with Rust and native AppKit Liquid Glass.",
+                        12.0, TEXT);
+                    ui.add_space(9.0);
+                    ui.horizontal(|ui| {
+                        ui.hyperlink_to("Website",
+                            "https://bookland-mac-island.moshe99871.chatgpt.site");
+                        ui.hyperlink_to("Source on GitHub",
+                            "https://github.com/KyrocEU/bookland");
+                    });
+                });
+                ui.add_space(12.0);
+                section_title(ui, "OPEN SOURCE PREVIEW");
+                card().show(ui, |ui| {
+                    label(ui, "Bookland's original code is MIT licensed. Third-party components and marks keep their own terms; see the repository notices.",
+                        12.0, TEXT);
+                    label(ui, "The island and major workspaces are working. Full NotchNook feature and animation parity is still in progress.",
+                        12.0, MUTED);
+                });
             }
             _ => {
                 card().show(ui, |ui| {
