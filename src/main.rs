@@ -51,6 +51,8 @@ unsafe extern "C" {
     fn nooklet_install_glass(view: *mut std::ffi::c_void) -> i32;
     fn nooklet_anchor_host_to_screen_top(enabled: i32);
     fn nooklet_reduce_motion() -> i32;
+    fn nooklet_physical_notch(width: *mut f64, height: *mut f64) -> i32;
+    fn nooklet_progress_ring_set(enabled: i32, x: f64, y: f64);
     fn bookland_scroll_take(delta_x: *mut f64, delta_y: *mut f64) -> i32;
     fn bookland_haptic_feedback();
     fn nooklet_hover_monitor_set(enabled: i32, context: *mut std::ffi::c_void,
@@ -553,12 +555,14 @@ struct DeskApp {
     applied_size: Vec2,
     transition: f32,
     transition_velocity: f32,
+    animation_target_expanded: bool,
     last_frame: Instant,
     last_hovered: Instant,
     hover_opened_at: Instant,
     hover_started: Option<Instant>,
     opened_by_hover: bool,
     hover_blocked_until_exit: bool,
+    native_ring_center: Option<egui::Pos2>,
     island_gesture: IslandGesture,
     last_haptic_expanded: bool,
     battery: String,
@@ -1388,9 +1392,29 @@ fn hover_close_guard(speed: f32, reduce_motion: bool) -> Duration {
         Duration::from_millis((600.0 / f64::from(speed.clamp(0.65, 1.0))).round() as u64)
     }
 }
+fn spring_step(position: f32, velocity: f32, target: f32,
+               omega: f32, damping: f32, dt: f32) -> (f32, f32) {
+    let displacement = position - target;
+    let decay = (-damping * omega * dt).exp();
+    if damping < 1.0 {
+        let frequency = omega * (1.0 - damping * damping).sqrt();
+        let sine = (frequency * dt).sin();
+        let cosine = (frequency * dt).cos();
+        let weighted = (velocity + damping * omega * displacement) / frequency;
+        let next = decay * (displacement * cosine + weighted * sine);
+        let next_velocity = decay * (velocity * cosine
+            - (omega * omega * displacement + damping * omega * velocity)
+                / frequency * sine);
+        (target + next, next_velocity)
+    } else {
+        let weighted = velocity + omega * displacement;
+        (target + decay * (displacement + weighted * dt),
+            decay * (velocity - omega * weighted * dt))
+    }
+}
 #[cfg(test)]
 mod hover_gate_tests {
-    use super::{hover_allowed_after_close, hover_close_guard};
+    use super::{hover_allowed_after_close, hover_close_guard, spring_step};
 
     #[test]
     fn explicit_close_requires_pointer_exit_before_hover_reopens() {
@@ -1408,6 +1432,16 @@ mod hover_gate_tests {
         assert_eq!(hover_close_guard(0.8, false).as_millis(), 750);
         assert_eq!(hover_close_guard(0.65, false).as_millis(), 923);
         assert_eq!(hover_close_guard(1.0, true).as_millis(), 250);
+    }
+
+    #[test]
+    fn spring_position_is_stable_across_frame_intervals() {
+        let omega = std::f32::consts::TAU / 0.47;
+        let once = spring_step(0.0, 0.0, 1.0, omega, 0.88, 0.08);
+        let first = spring_step(0.0, 0.0, 1.0, omega, 0.88, 0.04);
+        let twice = spring_step(first.0, first.1, 1.0, omega, 0.88, 0.04);
+        assert!((once.0 - twice.0).abs() < 0.0001);
+        assert!((once.1 - twice.1).abs() < 0.0001);
     }
 }
 fn glass_card_icon(ui: &egui::Ui, rect: egui::Rect, kind: usize) {
@@ -1626,6 +1660,21 @@ fn section_title(ui: &mut egui::Ui, text: &str) {
 }
 
 impl DeskApp {
+    fn closed_dimensions(&self) -> (f32, f32) {
+        let mut width = self.prefs.closed_width.clamp(180.0, 400.0);
+        let mut height = self.prefs.closed_height.clamp(30.0, 70.0);
+        #[cfg(target_os = "macos")]
+        if !self.preview_mode && self.screenshot.is_none() {
+            let mut notch_width = 0.0;
+            let mut notch_height = 0.0;
+            if unsafe { nooklet_physical_notch(&mut notch_width, &mut notch_height) } != 0 {
+                // Leave room for the Codex mark and activity ring beside the camera cutout.
+                width = width.max((notch_width as f32 + 76.0).clamp(180.0, 500.0));
+                height = height.max(notch_height as f32);
+            }
+        }
+        (width, height)
+    }
     fn open_dimensions(&self) -> (f32, f32) {
         if self.prefs.style == "Glass" {
             if self.workspace == Workspace::Agents {
@@ -1726,12 +1775,14 @@ impl DeskApp {
             applied_size: Vec2::ZERO,
             transition: if expanded { 1.0 } else { 0.0 },
             transition_velocity: 0.0,
+            animation_target_expanded: expanded,
             last_frame: now,
             last_hovered: now,
             hover_opened_at: now,
             hover_started: None,
             opened_by_hover: false,
             hover_blocked_until_exit: false,
+            native_ring_center: None,
             island_gesture: IslandGesture::default(),
             last_haptic_expanded: expanded,
             battery: battery_status(),
@@ -1905,6 +1956,12 @@ impl DeskApp {
                 self.native_installed = nooklet_install_glass(self.native_view as *mut _) != 0;
             }
             if self.native_installed {
+                if let Some(center) = self.native_ring_center.filter(|_| !self.preview_mode
+                    && self.screenshot.is_none() && self.transition == 0.0) {
+                    nooklet_progress_ring_set(1, center.x as f64, center.y as f64);
+                } else {
+                    nooklet_progress_ring_set(0, 0.0, 0.0);
+                }
                 nooklet_anchor_host_to_screen_top((!self.preview_mode && self.screenshot.is_none()
                     && !(self.expanded && self.clipboard_bottom_sheet
                         && self.workspace == Workspace::Clipboard)) as i32);
@@ -1919,14 +1976,16 @@ impl DeskApp {
                     self.hover_monitor_enabled = hover_wanted;
                 }
                 for (slot, area) in self.glass_rects.iter().enumerate() {
+                    let morphing = slot == 0 && self.transition > 0.15;
                     let enabled = self.screenshot.is_none()
                         && self.prefs.style == "Glass"
-                        && self.transition >= 0.96;
+                        && (self.transition >= 0.96 || morphing);
                     if let Some(rect) = area.filter(|_| enabled) {
                         nooklet_set_glass(
                             slot as i32, rect.min.x as f64, rect.min.y as f64,
                             rect.width() as f64, rect.height() as f64,
-                            if slot == 0 { 26.0 } else { 23.0 },
+                            if slot == 0 { f64::from(26.0_f32.min(rect.height() * 0.5)) }
+                                else { 23.0 },
                             self.prefs.glass_level as f64, 1,
                         );
                     } else {
@@ -5116,6 +5175,10 @@ impl DeskApp {
     fn compact_glass_agents_panel(&mut self, ui: &mut egui::Ui, width: f32, height: f32) {
         self.agent_completion = None;
         let agent = self.agents.get(self.selected_agent).or_else(|| self.agents.first()).cloned();
+        let decision_pending = agent.as_ref().is_some_and(|agent|
+            agent.source == "Codex"
+                && desktop_codex_thread_id(&agent.path) == self.desktop_codex_thread_id
+                && (self.desktop_codex_approval.is_some() || self.desktop_codex_question.is_some()));
         let mut gradient = None;
         let panel = Frame::new()
             .fill(Color32::from_rgba_unmultiplied(197, 197, 199, 240))
@@ -5324,8 +5387,15 @@ impl DeskApp {
                             });
                             ui.add_space(4.0);
                             let full_message = agent.last_message.as_ref().unwrap_or(&agent.title);
-                            let mut message: String = full_message.chars().take(104).collect();
-                            if full_message.chars().count() > 104 { message.push('…'); }
+                            let message = if decision_pending {
+                                if self.desktop_codex_approval.is_some() {
+                                    "Approval needed · Review in Bookland".to_owned()
+                                } else { "Codex has a question · Review in Bookland".to_owned() }
+                            } else {
+                                let mut message: String = full_message.chars().take(104).collect();
+                                if full_message.chars().count() > 104 { message.push('…'); }
+                                message
+                            };
                             ui.vertical(|ui| {
                                 ui.add_space(27.0);
                                 let bubble = Frame::new()
@@ -5345,26 +5415,17 @@ impl DeskApp {
                                             .halign(Align::Center).wrap());
                                     });
                                 });
+                                let hint = if decision_pending { "Review Codex request in Bookland" }
+                                    else if agent.source == "Codex" { "Open Codex app" }
+                                    else { "Latest activity" };
                                 if bubble.response.interact(egui::Sense::click())
-                                    .on_hover_text("Open Codex in Bookland").clicked() {
-                                    if agent.source == "Codex" {
-                                        if let Some(id) = desktop_codex_thread_id(&agent.path) {
-                                            if self.desktop_codex_rx.is_some()
-                                                && self.desktop_codex_thread_id.as_deref() != Some(&id) {
-                                                self.desktop_codex_status =
-                                                    "Finish the current island reply before switching chats".into();
-                                            } else if self.desktop_codex_thread_id.as_deref() != Some(&id) {
-                                                self.desktop_codex_messages.clear();
-                                                self.desktop_codex_status.clear();
-                                                self.desktop_codex_thread_id = Some(id);
-                                                self.desktop_codex_title = agent.title.clone();
-                                                self.agent_chat_desktop = true;
-                                            } else {
-                                                self.agent_chat_desktop = true;
-                                            }
-                                        } else { self.agent_chat_desktop = false; }
-                                    } else { self.agent_chat_desktop = false; }
-                                    self.agent_chat_open = true;
+                                    .on_hover_text(hint).clicked() {
+                                    if decision_pending {
+                                        self.agent_chat_desktop = true;
+                                        self.agent_chat_open = true;
+                                    } else if agent.source == "Codex" {
+                                        let _ = Command::new("open").args(["-b", "com.openai.codex"]).spawn();
+                                    }
                                 }
                             });
                         });
@@ -5665,25 +5726,26 @@ impl DeskApp {
                     let status: String = self.desktop_codex_status.chars().take(125).collect();
                     ui.add(egui::Label::new(RichText::new(status).size(11.0).color(MUTED)).wrap());
                 }
-                ui.add_space(7.0);
-                ui.horizontal(|ui| {
-                    let input = ui.add_enabled(approval.is_none() && question.is_none(),
-                        egui::TextEdit::singleline(&mut self.desktop_codex_draft)
-                        .id_salt("bookland_desktop_codex_prompt")
-                        .hint_text("Reply to this Codex chat…")
-                        .desired_width(width - 150.0));
-                    let shortcut = input.has_focus() && ui.input(|input|
-                        input.key_pressed(egui::Key::Enter));
-                    let ready = !busy && approval.is_none() && question.is_none()
-                        && self.desktop_codex_rx.is_none()
-                        && !self.desktop_codex_draft.trim().is_empty();
-                    if ui.add_enabled(ready, egui::Button::new("Send ↗")
-                        .fill(Color32::from_rgb(36, 93, 67))
-                        .corner_radius(12)).clicked() || (ready && shortcut) {
-                        self.send_desktop_codex();
-                    }
-                });
+                if approval.is_none() && question.is_none() {
+                    ui.add_space(7.0);
+                    ui.horizontal(|ui| {
+                        let input = ui.add(egui::TextEdit::singleline(&mut self.desktop_codex_draft)
+                            .id_salt("bookland_desktop_codex_prompt")
+                            .hint_text("Reply to this Codex chat…")
+                            .desired_width(width - 150.0));
+                        let shortcut = input.has_focus() && ui.input(|input|
+                            input.key_pressed(egui::Key::Enter));
+                        let ready = !busy && self.desktop_codex_rx.is_none()
+                            && !self.desktop_codex_draft.trim().is_empty();
+                        if ui.add_enabled(ready, egui::Button::new("Send ↗")
+                            .fill(Color32::from_rgb(36, 93, 67))
+                            .corner_radius(12)).clicked() || (ready && shortcut) {
+                            self.send_desktop_codex();
+                        }
+                    });
+                }
                 ui.add_space(5.0);
+                if approval.is_none() && question.is_none() {
                 ui.horizontal(|ui| {
                     if self.desktop_codex_rx.is_some() {
                         if ui.add_enabled(self.desktop_codex_pid.is_some() && !self.desktop_codex_stopping,
@@ -5711,6 +5773,7 @@ impl DeskApp {
                             .on_hover_text("This lets Codex edit its selected workspace. Other actions ask here first.");
                     });
                 });
+                }
             });
         if let Some(index) = gradient {
             ui.painter().set(index, agents_upper_shade(panel.response.rect));
@@ -5991,8 +6054,7 @@ impl DeskApp {
         }
     }
     fn closed_notch(&mut self, ui: &mut egui::Ui) {
-        let width = self.prefs.closed_width.clamp(180.0, 400.0);
-        let height = self.prefs.closed_height.clamp(30.0, 70.0);
+        let (width, height) = self.closed_dimensions();
         let response = Frame::new()
             .fill(BLACK)
             .corner_radius(CornerRadius {
@@ -6025,17 +6087,21 @@ impl DeskApp {
                             Vec2::new(width - 30.0, height - 8.0), egui::Sense::hover());
                         let left = egui::pos2(strip.left() + 7.0, strip.center().y);
                         let right = egui::pos2(strip.right() - 7.0, strip.center().y);
+                        self.native_ring_center = Some(right);
                         let blue = Color32::from_rgb(75, 139, 251);
                         paint_codex_logo(ui.painter(), left, 15.0, blue,
                             self.codex_logo.as_ref());
-                        let time = ui.input(|input| input.time) as f32;
-                        let arc: Vec<_> = (0..=28).map(|step| {
-                            let angle = time * 2.1 + step as f32 / 28.0 * std::f32::consts::FRAC_PI_2;
-                            right + Vec2::angled(angle) * 7.0
-                        }).collect();
-                        ui.painter().circle_stroke(right, 7.0,
-                            Stroke::new(1.5, Color32::from_rgba_unmultiplied(52, 93, 156, 110)));
-                        ui.painter().add(egui::Shape::line(arc, Stroke::new(2.0, blue)));
+                        if !self.native_installed || self.preview_mode || self.screenshot.is_some() {
+                            let time = ui.input(|input| input.time) as f32;
+                            let arc: Vec<_> = (0..=28).map(|step| {
+                                let angle = time * 2.1
+                                    + step as f32 / 28.0 * std::f32::consts::FRAC_PI_2;
+                                right + Vec2::angled(angle) * 7.0
+                            }).collect();
+                            ui.painter().circle_stroke(right, 7.0,
+                                Stroke::new(1.5, Color32::from_rgba_unmultiplied(52, 93, 156, 110)));
+                            ui.painter().add(egui::Shape::line(arc, Stroke::new(2.0, blue)));
+                        }
                         if self.airpods.name.is_some() {
                             let badge = self.airpods.compact_battery()
                                 .unwrap_or_else(|| "AirPods".into());
@@ -6155,25 +6221,39 @@ impl DeskApp {
     }
     fn morphing_notch(&mut self, ui: &mut egui::Ui) {
         let (open_width, open_height) = self.open_dimensions();
+        let (closed_width, closed_height) = self.closed_dimensions();
         let width = egui::lerp(
-            self.prefs.closed_width..=open_width,
+            closed_width..=open_width,
             self.transition,
         );
         let height = egui::lerp(
-            self.prefs.closed_height..=open_height,
+            closed_height..=open_height,
             self.transition,
         );
         let (rect, _) = ui.allocate_exact_size(Vec2::new(width, height), egui::Sense::hover());
-        ui.painter().rect_filled(
-            rect,
-            CornerRadius {
-                nw: 0,
-                ne: 0,
-                sw: 22,
-                se: 22,
-            },
-            BLACK,
-        );
+        let radius = (17.0 + self.transition * 12.0).round() as u8;
+        let corners = CornerRadius { nw: 0, ne: 0, sw: radius, se: radius };
+        if self.prefs.style == "Glass" {
+            let reveal = ((self.transition - 0.15) / 0.70).clamp(0.0, 1.0);
+            ui.painter().rect_filled(rect, corners,
+                Color32::from_rgba_unmultiplied(0, 0, 0,
+                    ((1.0 - reveal) * 255.0).round() as u8));
+            if reveal > 0.0 {
+                let alpha = (reveal * reveal * 240.0).round() as u8;
+                ui.painter().rect_filled(rect, corners,
+                    Color32::from_rgba_unmultiplied(197, 197, 199, alpha));
+                ui.painter().add(if self.workspace == Workspace::Agents {
+                    agents_upper_shade(rect)
+                } else { island_upper_shade(rect) });
+                ui.painter().rect_stroke(rect, corners,
+                    Stroke::new(0.7,
+                        Color32::from_rgba_unmultiplied(226, 232, 245,
+                            (reveal * 95.0).round() as u8)),
+                    egui::StrokeKind::Inside);
+            }
+        } else {
+            ui.painter().rect_filled(rect, corners, BLACK);
+        }
         self.glass_rects[0] = Some(rect);
     }
     fn settings_nav(&mut self, ui: &mut egui::Ui) {
@@ -7127,6 +7207,7 @@ impl eframe::App for DeskApp {
         }
         self.glass_rects = [None; 8];
         self.open_notch_rect = None;
+        self.native_ring_center = None;
         let now = Instant::now();
         let (dragging_file, pointer_x) = ctx.input(|input|
             (!input.raw.hovered_files.is_empty(), input.pointer.hover_pos().map(|pos| pos.x)));
@@ -7136,8 +7217,12 @@ impl eframe::App for DeskApp {
             self.pocket_opened_from_drag = true;
             self.notify("Pocket open · drop the file in the floating panel");
         }
-        let dt = now.duration_since(self.last_frame).as_secs_f32().min(0.1);
+        let target_changed = self.expanded != self.animation_target_expanded;
+        self.animation_target_expanded = self.expanded;
+        let dt = if target_changed { 0.0 }
+            else { now.duration_since(self.last_frame).as_secs_f32().min(0.1) };
         self.last_frame = now;
+        let expanded_before_panel = self.expanded;
         let target = if self.expanded { 1.0 } else { 0.0 };
         let response = if self.expanded { 0.47 } else { 0.4 };
         let damping = if self.prefs.style == "Glass" {
@@ -7150,10 +7235,9 @@ impl eframe::App for DeskApp {
             1.0
         };
         let omega = std::f32::consts::TAU * self.prefs.animation_speed.clamp(0.5, 2.0) / response;
-        self.transition_velocity += (omega * omega * (target - self.transition)
-            - 2.0 * damping * omega * self.transition_velocity)
-            * dt;
-        self.transition = (self.transition + self.transition_velocity * dt).clamp(0.0, 1.0);
+        (self.transition, self.transition_velocity) = spring_step(
+            self.transition, self.transition_velocity, target, omega, damping, dt);
+        self.transition = self.transition.clamp(0.0, 1.0);
         if self.transition == target
             && ((target == 1.0 && self.transition_velocity > 0.0)
                 || (target == 0.0 && self.transition_velocity < 0.0))
@@ -7164,8 +7248,10 @@ impl eframe::App for DeskApp {
             self.transition = target;
             self.transition_velocity = 0.0;
         }
-        if self.screenshot.is_some() || self.transition != target {
+        if self.screenshot.is_some() || target_changed {
             ctx.request_repaint();
+        } else if self.transition != target {
+            ctx.request_repaint_after(Duration::from_millis(16));
         } else {
             ctx.request_repaint_after(Duration::from_millis(if self.expanded { 100 }
                 else if self.prefs.open_on_hover { 350 } else { 500 }));
@@ -7183,13 +7269,14 @@ impl eframe::App for DeskApp {
         let compact_nook = self.prefs.style == "Glass" && self.workspace == Workspace::Nook
             && self.prefs.widgets == Widget::DEFAULT && self.prefs.nook_enabled
             && open_height <= 260.0;
+        let (closed_width, closed_height) = self.closed_dimensions();
         let size = Vec2::new(
             egui::lerp(
-                self.prefs.closed_width + 30.0..=open_width + 44.0,
+                closed_width + 30.0..=open_width + 44.0,
                 self.transition,
             ),
             egui::lerp(
-                self.prefs.closed_height + 12.0..=open_height + if position_bottom { 34.0 }
+                closed_height + 12.0..=open_height + if position_bottom { 34.0 }
                     else if compact_nook { 75.0 } else { 160.0 },
                 self.transition,
             ),
@@ -7307,6 +7394,9 @@ impl eframe::App for DeskApp {
             self.last_haptic_expanded = self.expanded;
         }
         self.apply_native_glass();
+        if self.expanded != expanded_before_panel {
+            ctx.request_repaint();
+        }
         if self.prefs != before {
             self.save_prefs();
         }

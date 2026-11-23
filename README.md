@@ -18,14 +18,16 @@ Bookland is an independent project inspired by the hover island in NotchNook. It
 | Calendar | Upcoming events and event creation through macOS EventKit after the user grants Calendar access. |
 | Tray and Pocket | Recent files, a floating drag-and-drop Pocket, independent file copies, image conversion, AirDrop handoff, and user-initiated YouTube video downloads through yt-dlp. |
 | Clipboard | Searchable text, link, color, image, and Finder-file cards with favorites and privacy controls. Optional local persistence excludes image payloads. |
-| Agents | Recent local Codex, Claude Code, and optional external activity feed; task progress, usage information when available, and a compact Codex chat in the island. |
+| Agents | Recent local Codex, Claude Code, and optional external activity feed; task progress, usage information when available, and a compact decision view for Bookland-connected Codex turns. |
 | Prompts and Prompter | An editable spreadsheet-chat prompt builder and a script prompter with scroll or voice-following modes. Both can be added to the island menu. |
 
-The default Glass Nook is a single wide row. Music, Calendar, Tray, and the optional workspaces open as compact top-edge panels. The Agents panel uses a compact Progress/Usage layout and opens Codex chat in the same island.
+The default Glass Nook is a single wide row. Music, Calendar, Tray, and the optional workspaces open as compact top-edge panels. The Agents hover panel uses a compact Progress/Usage layout. Its activity bubble opens the Codex app for ordinary desktop tasks; if a Bookland-connected turn asks for a decision, the bubble opens that request inside the same island. On Macs with a camera notch, the closed strip measures the cutout and leaves space for its status symbols on either side.
+
+The closed activity ring runs in a macOS Core Animation layer so it moves between Bookland's low-frequency idle redraws. Opening and closing use a time-based spring with a 60 fps rendering cap during the brief transition; native glass is revealed as the panel expands. The physical camera cutout remains hardware: Bookland draws the interactive surface around and below it.
 
 ### Codex inside the island
 
-Bookland can read local Codex session activity and connect to a selected **desktop Codex thread** through the installed Codex app-server. The in-island composer starts read-only. “Allow edits” enables workspace writes for a turn; command and file approvals, plus Codex questions, appear in the panel. Bookland saves the thread's prior approval and sandbox settings before changing them, then restores them when the turn ends or when recovery runs after an interrupted launch. A separate private Codex chat can be started from Bookland. The Codex app must be installed and signed in for these integrations.
+Bookland reads local Codex session activity for the hover panel. An optional in-island composer, reached through the prompt builder, can connect to a selected **desktop Codex thread** through the installed Codex app-server. It starts read-only. “Allow edits” enables workspace writes for that Bookland-connected turn; command and file approvals, plus Codex questions, appear in the island. Bookland saves the thread's prior approval and sandbox settings before changing them, then restores them when the turn ends or when recovery runs after an interrupted launch. A separate private Codex chat can be started from Bookland. The Codex app must be installed and signed in for these integrations. Bookland cannot yet receive or answer approval requests raised by turns already running in the Codex desktop app.
 
 Bookland also accepts an optional local JSON feed from other tools. See [AGENT_FEED.md](AGENT_FEED.md) for the format. It shows brief activity labels and selected visible messages; it does not upload the session log to Bookland servers.
 

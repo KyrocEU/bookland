@@ -1,4 +1,5 @@
 #import <AppKit/AppKit.h>
+#import <QuartzCore/QuartzCore.h>
 
 // Keep winit's content view untouched: it owns keyboard and IME state.
 // A non-interactive child window carries native glass behind its transparent pixels.
@@ -6,6 +7,9 @@ static NSGlassEffectView *nookletGlass[8];
 static NSView *nookletContainer;
 static NSWindow *nookletHostWindow;
 static NSWindow *nookletGlassWindow;
+static NSWindow *nookletProgressWindow;
+static CAShapeLayer *nookletProgressTrack;
+static CAShapeLayer *nookletProgressArc;
 static id booklandScrollMonitor;
 static double booklandScrollDeltaX;
 static double booklandScrollDeltaY;
@@ -22,6 +26,19 @@ static int booklandHoverPointerState = -1;
 
 int nooklet_reduce_motion(void) {
     return NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceMotion ? 1 : 0;
+}
+
+int nooklet_physical_notch(double *width, double *height) {
+    NSScreen *screen = nookletHostWindow.screen ?: NSScreen.mainScreen;
+    if (!screen) return 0;
+    NSRect left = screen.auxiliaryTopLeftArea;
+    NSRect right = screen.auxiliaryTopRightArea;
+    double gap = NSMinX(right) - NSMaxX(left);
+    double top = screen.safeAreaInsets.top;
+    if (NSIsEmptyRect(left) || NSIsEmptyRect(right) || gap <= 0 || top <= 0) return 0;
+    if (width) *width = gap;
+    if (height) *height = top;
+    return 1;
 }
 
 int bookland_scroll_take(double *deltaX, double *deltaY) {
@@ -207,4 +224,71 @@ void nooklet_set_glass(int slot, double x, double y, double width, double height
     view.tintColor = [NSColor colorWithCalibratedRed:0.055 green:0.063 blue:0.078
                                               alpha:fmax(0.03, fmin(0.18, level * 0.14))];
     view.hidden = NO;
+}
+
+void nooklet_progress_ring_set(int enabled, double x, double y) {
+    if (!nookletHostWindow) return;
+    if (!enabled) {
+        if (nookletProgressWindow.isVisible) [nookletProgressWindow orderOut:nil];
+        return;
+    }
+    if (!nookletProgressWindow) {
+        NSWindow *window = [[NSWindow alloc]
+            initWithContentRect:nookletHostWindow.frame
+                      styleMask:NSWindowStyleMaskBorderless
+                        backing:NSBackingStoreBuffered defer:NO];
+        window.opaque = NO;
+        window.backgroundColor = NSColor.clearColor;
+        window.hasShadow = NO;
+        window.ignoresMouseEvents = YES;
+        window.collectionBehavior = nookletHostWindow.collectionBehavior;
+        NSView *content = [[NSView alloc] initWithFrame:window.contentView.bounds];
+        content.wantsLayer = YES;
+        content.layer.backgroundColor = NSColor.clearColor.CGColor;
+        content.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+        window.contentView = content;
+        CGMutablePathRef path = CGPathCreateMutable();
+        CGPathAddEllipseInRect(path, NULL, CGRectMake(7, 7, 14, 14));
+        nookletProgressTrack = [CAShapeLayer layer];
+        nookletProgressTrack.bounds = CGRectMake(0, 0, 28, 28);
+        nookletProgressTrack.path = path;
+        nookletProgressTrack.fillColor = NSColor.clearColor.CGColor;
+        nookletProgressTrack.strokeColor = [NSColor colorWithCalibratedRed:0.204
+            green:0.365 blue:0.612 alpha:0.43].CGColor;
+        nookletProgressTrack.lineWidth = 1.5;
+        [content.layer addSublayer:nookletProgressTrack];
+        CGPathRelease(path);
+
+        path = CGPathCreateMutable();
+        CGPathAddArc(path, NULL, 14, 14, 7, 0, -M_PI_2, true);
+        nookletProgressArc = [CAShapeLayer layer];
+        nookletProgressArc.bounds = CGRectMake(0, 0, 28, 28);
+        nookletProgressArc.path = path;
+        nookletProgressArc.fillColor = NSColor.clearColor.CGColor;
+        nookletProgressArc.strokeColor = [NSColor colorWithCalibratedRed:0.294
+            green:0.545 blue:0.984 alpha:1.0].CGColor;
+        nookletProgressArc.lineWidth = 2.0;
+        nookletProgressArc.lineCap = kCALineCapRound;
+        [content.layer addSublayer:nookletProgressArc];
+        CGPathRelease(path);
+        CABasicAnimation *spin = [CABasicAnimation animationWithKeyPath:@"transform.rotation.z"];
+        spin.fromValue = @0;
+        spin.toValue = @(-2.0 * M_PI);
+        spin.duration = 3.0;
+        spin.repeatCount = HUGE_VALF;
+        spin.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionLinear];
+        [nookletProgressArc addAnimation:spin forKey:@"bookland-progress-spin"];
+        [nookletHostWindow addChildWindow:window ordered:NSWindowAbove];
+        nookletProgressWindow = window;
+    }
+    if (!NSEqualRects(nookletProgressWindow.frame, nookletHostWindow.frame)) {
+        [nookletProgressWindow setFrame:nookletHostWindow.frame display:NO];
+    }
+    CGPoint center = CGPointMake(x, nookletProgressWindow.contentView.bounds.size.height - y);
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    nookletProgressTrack.position = center;
+    nookletProgressArc.position = center;
+    [CATransaction commit];
+    if (!nookletProgressWindow.isVisible) [nookletProgressWindow orderFront:nil];
 }
