@@ -1,6 +1,7 @@
 #import <AppKit/AppKit.h>
 #import <CoreAudio/CoreAudio.h>
 #import <QuartzCore/QuartzCore.h>
+#import <math.h>
 
 // A volume activity card uses Core Audio notifications and Core Animation.
 // It has no timer or rendering work while hidden.
@@ -23,6 +24,18 @@ static AudioObjectPropertyAddress booklandAddress(AudioObjectPropertySelector se
     return (AudioObjectPropertyAddress) { selector, kAudioDevicePropertyScopeOutput, element };
 }
 
+static AudioObjectID booklandDefaultOutputDevice(void) {
+    AudioObjectID device = kAudioObjectUnknown;
+    UInt32 size = sizeof(device);
+    AudioObjectPropertyAddress address = {
+        kAudioHardwarePropertyDefaultOutputDevice,
+        kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain
+    };
+    if (AudioObjectGetPropertyData(kAudioObjectSystemObject, &address, 0, NULL,
+                                   &size, &device) != noErr) return kAudioObjectUnknown;
+    return device;
+}
+
 static BOOL booklandReadScalar(AudioObjectID device, AudioObjectPropertyElement element,
                                Float32 *value) {
     AudioObjectPropertyAddress address = booklandAddress(kAudioDevicePropertyVolumeScalar, element);
@@ -31,21 +44,52 @@ static BOOL booklandReadScalar(AudioObjectID device, AudioObjectPropertyElement 
         AudioObjectGetPropertyData(device, &address, 0, NULL, &size, value) == noErr;
 }
 
-static Float32 booklandVolume(void) {
-    if (booklandOutputDevice == kAudioObjectUnknown) return -1;
+static Float32 booklandVolumeForDevice(AudioObjectID device) {
+    if (device == kAudioObjectUnknown) return -1;
     Float32 value = 0;
-    if (booklandReadScalar(booklandOutputDevice, kAudioObjectPropertyElementMain, &value)) {
+    if (booklandReadScalar(device, kAudioObjectPropertyElementMain, &value)) {
         return fmaxf(0, fminf(1, value));
     }
     Float32 sum = 0;
     int count = 0;
     for (AudioObjectPropertyElement element = 1; element <= 2; element++) {
-        if (booklandReadScalar(booklandOutputDevice, element, &value)) {
+        if (booklandReadScalar(device, element, &value)) {
             sum += value;
             count++;
         }
     }
     return count ? fmaxf(0, fminf(1, sum / count)) : -1;
+}
+
+static Float32 booklandVolume(void) {
+    return booklandVolumeForDevice(booklandOutputDevice);
+}
+
+float bookland_system_volume_get(void) {
+    return booklandVolumeForDevice(booklandDefaultOutputDevice());
+}
+
+int bookland_system_volume_set(float value) {
+    if (!isfinite(value)) return 0;
+    AudioObjectID device = booklandDefaultOutputDevice();
+    if (device == kAudioObjectUnknown) return 0;
+    Float32 bounded = fmaxf(0, fminf(1, value));
+    BOOL changed = NO;
+    for (AudioObjectPropertyElement element = 0; element <= 2; element++) {
+        AudioObjectPropertyAddress address = booklandAddress(
+            kAudioDevicePropertyVolumeScalar, element);
+        Boolean settable = false;
+        if (!AudioObjectHasProperty(device, &address) ||
+            AudioObjectIsPropertySettable(device, &address, &settable) != noErr || !settable) {
+            continue;
+        }
+        if (AudioObjectSetPropertyData(device, &address, 0, NULL,
+                                       sizeof(bounded), &bounded) == noErr) {
+            changed = YES;
+            if (element == kAudioObjectPropertyElementMain) break;
+        }
+    }
+    return changed ? 1 : 0;
 }
 
 static BOOL booklandMuted(void) {
@@ -227,14 +271,7 @@ static void booklandBindOutputDevice(void) {
         };
     }
     booklandUnbindOutputDevice();
-    AudioObjectID device = kAudioObjectUnknown;
-    UInt32 size = sizeof(device);
-    AudioObjectPropertyAddress address = {
-        kAudioHardwarePropertyDefaultOutputDevice,
-        kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain
-    };
-    if (AudioObjectGetPropertyData(kAudioObjectSystemObject, &address, 0, NULL,
-                                   &size, &device) != noErr) device = kAudioObjectUnknown;
+    AudioObjectID device = booklandDefaultOutputDevice();
     booklandOutputDevice = device;
     if (device == kAudioObjectUnknown) return;
     for (AudioObjectPropertyElement element = 0; element <= 2; element++) {

@@ -58,6 +58,8 @@ unsafe extern "C" {
     fn nooklet_physical_notch(width: *mut f64, height: *mut f64) -> i32;
     fn nooklet_progress_ring_set(enabled: i32, x: f64, y: f64, usage_style: i32);
     fn bookland_volume_hud_set(enabled: i32);
+    fn bookland_system_volume_get() -> f32;
+    fn bookland_system_volume_set(value: f32) -> i32;
     fn bookland_airpods_watch_set(enabled: i32) -> i32;
     fn bookland_airpods_events_take() -> i32;
     fn bookland_airpods_watch_status() -> i32;
@@ -1147,6 +1149,13 @@ mod pulse_tests {
     }
 }
 fn system_volume() -> f32 {
+    #[cfg(target_os = "macos")]
+    {
+        let scalar = unsafe { bookland_system_volume_get() };
+        if scalar >= 0.0 {
+            return scalar * 100.0;
+        }
+    }
     run_output(
         "osascript",
         &["-e", "output volume of (get volume settings)"],
@@ -1155,6 +1164,10 @@ fn system_volume() -> f32 {
     .unwrap_or(50.0)
 }
 fn set_system_volume(value: f32) {
+    #[cfg(target_os = "macos")]
+    if unsafe { bookland_system_volume_set(value / 100.0) } != 0 {
+        return;
+    }
     let script = format!("set volume output volume {}", value.round() as i32);
     let _ = run_output("osascript", &["-e", &script]);
 }
