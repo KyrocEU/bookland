@@ -81,9 +81,13 @@ unsafe extern "C" {
     fn nooklet_calendar_month(offset: i32, buffer: *mut std::ffi::c_char,
         capacity: usize) -> usize;
     fn nooklet_calendar_connect();
-    fn nooklet_calendar_refresh();
+    fn nooklet_calendar_refresh(calendar_id: *const std::ffi::c_char, month_offset: i32);
+    fn nooklet_calendar_snapshot_version() -> u64;
     fn nooklet_calendar_copy(buffer: *mut std::ffi::c_char, capacity: usize) -> usize;
-    fn nooklet_calendar_add(title: *const std::ffi::c_char, start: f64, duration: f64) -> i32;
+    fn nooklet_calendar_calendars_copy(buffer: *mut std::ffi::c_char,
+        capacity: usize) -> usize;
+    fn nooklet_calendar_add(title: *const std::ffi::c_char, start: f64,
+        duration: f64, calendar_id: *const std::ffi::c_char) -> i32;
     fn nooklet_shortcut_set(enabled: i32) -> i32;
     fn nooklet_shortcut_take() -> i32;
     fn bookland_clipboard_shortcut_set(enabled: i32) -> i32;
@@ -138,21 +142,37 @@ extern "C" fn bookland_pocket_shake_sample(x: f64, dragging: bool) -> bool {
 #[derive(Clone, Deserialize)]
 struct CalendarEvent {
     title: String,
-    #[allow(dead_code)]
     start: f64,
     #[allow(dead_code)]
     end: f64,
     calendar: String,
+    #[serde(default)]
+    day_key: String,
     #[allow(dead_code)]
     all_day: bool,
     #[serde(default)]
     display_time: String,
 }
 
-#[derive(Default, Deserialize)]
+#[derive(Clone, Deserialize)]
+struct CalendarChoice {
+    id: String,
+    title: String,
+    source: String,
+    writable: bool,
+}
+
+#[derive(Clone, Default, Deserialize)]
+#[serde(default)]
 struct CalendarMonth {
     title: String,
+    #[allow(dead_code)]
     grid: String,
+    year: i32,
+    month: u32,
+    first_weekday: u32,
+    days_in_month: u32,
+    today: u32,
 }
 
 fn load_calendar_month(offset: i32) -> Option<CalendarMonth> {
@@ -512,6 +532,7 @@ struct Preferences {
     launch_at_login: bool,
     demo_mode: bool,
     media_source: String,
+    calendar_id: String,
     style: String,
     glass_level: f32,
     animation_speed: f32,
@@ -584,6 +605,7 @@ impl Default for Preferences {
             launch_at_login: false,
             demo_mode: false,
             media_source: "System".into(),
+            calendar_id: String::new(),
             style: "Glass".into(),
             glass_level: 0.75,
             animation_speed: 1.0,
@@ -841,9 +863,13 @@ struct DeskApp {
     craft_rx: Option<std::sync::mpsc::Receiver<Vec<AgentSnapshot>>>,
     last_craft_poll: Instant,
     calendar_status: i32,
+    calendar_choices: Vec<CalendarChoice>,
     calendar_events: Vec<CalendarEvent>,
+    calendar_snapshot_version: u64,
+    calendar_query_pending: bool,
     calendar_month_key: Option<(i32, i32)>,
     calendar_month: CalendarMonth,
+    calendar_selected_day: Option<u32>,
     last_calendar_poll: Instant,
     new_event_title: String,
     new_event_date: String,
@@ -2343,9 +2369,13 @@ impl DeskApp {
             craft_rx: None,
             last_craft_poll: now - Duration::from_secs(30),
             calendar_status: 0,
+            calendar_choices: Vec::new(),
             calendar_events: Vec::new(),
+            calendar_snapshot_version: 0,
+            calendar_query_pending: false,
             calendar_month_key: None,
             calendar_month: CalendarMonth::default(),
+            calendar_selected_day: None,
             last_calendar_poll: now - Duration::from_secs(35),
             new_event_title: String::new(),
             new_event_date: run_output("date", &["+%Y-%m-%d"]).unwrap_or_default(),
@@ -2989,18 +3019,44 @@ impl DeskApp {
             self.craft_agents.clear();
             self.agents.retain(|agent| agent.source != "Craft Anything");
         }
-        if self.workspace == Workspace::Calendar && self.last_calendar_poll.elapsed() >= Duration::from_secs(30) {
+        let calendar_poll_interval = if self.calendar_status == 0 { 1 } else { 30 };
+        if self.workspace == Workspace::Calendar
+            && self.last_calendar_poll.elapsed() >= Duration::from_secs(calendar_poll_interval) {
             #[cfg(target_os = "macos")]
             unsafe {
                 self.calendar_status = nooklet_calendar_status();
                 if self.calendar_status == 1 {
-                    nooklet_calendar_refresh();
-                    let mut buffer = vec![0_u8; 65_536];
-                    let size = nooklet_calendar_copy(buffer.as_mut_ptr().cast(), buffer.len());
-                    self.calendar_events = serde_json::from_slice(&buffer[..size]).unwrap_or_default();
+                    let mut choices = vec![0_u8; 65_536];
+                    let count = nooklet_calendar_calendars_copy(
+                        choices.as_mut_ptr().cast(), choices.len());
+                    self.calendar_choices = serde_json::from_slice(&choices[..count])
+                        .unwrap_or_default();
+                    let selected = CString::new(self.prefs.calendar_id.as_str()).ok();
+                    self.calendar_snapshot_version = nooklet_calendar_snapshot_version();
+                    nooklet_calendar_refresh(selected.as_ref().map_or(
+                        std::ptr::null(), |value| value.as_ptr()), self.calendar_offset);
+                    self.calendar_query_pending = true;
+                } else {
+                    self.calendar_choices.clear();
+                    self.calendar_events.clear();
+                    self.calendar_query_pending = false;
                 }
             }
             self.last_calendar_poll = Instant::now();
+        }
+        #[cfg(target_os = "macos")]
+        if self.workspace == Workspace::Calendar && self.calendar_query_pending {
+            unsafe {
+                let version = nooklet_calendar_snapshot_version();
+                if version != self.calendar_snapshot_version {
+                    let mut buffer = vec![0_u8; 131_072];
+                    let size = nooklet_calendar_copy(buffer.as_mut_ptr().cast(), buffer.len());
+                    self.calendar_events = serde_json::from_slice(&buffer[..size])
+                        .unwrap_or_default();
+                    self.calendar_snapshot_version = version;
+                    self.calendar_query_pending = false;
+                }
+            }
         }
         let system_poll_interval = if self.expanded {
             self.prefs.pulse_interval.max(1)
@@ -4414,72 +4470,220 @@ impl DeskApp {
         let key = (current_month, self.calendar_offset);
         if self.calendar_month_key != Some(key) {
             self.calendar_month = load_calendar_month(self.calendar_offset).unwrap_or_else(||
-                CalendarMonth { title: "Calendar".into(), grid: "Calendar is unavailable".into() });
+                CalendarMonth { title: "Calendar".into(), grid: "Calendar is unavailable".into(),
+                    ..Default::default() });
             self.calendar_month_key = Some(key);
+            self.calendar_selected_day = None;
         }
         let month_year = self.calendar_month.title.clone();
-        let month = self.calendar_month.grid.clone();
+        let month = self.calendar_month.clone();
+        let prefix = format!("{:04}-{:02}-", month.year, month.month);
+        let mut day_counts = [0_u8; 32];
+        for event in &self.calendar_events {
+            if let Some(day) = event.day_key.strip_prefix(&prefix)
+                .and_then(|value| value.parse::<usize>().ok()) {
+                if day <= 31 { day_counts[day] = day_counts[day].saturating_add(1); }
+            }
+        }
+        if self.calendar_status == 0 {
+            ui.horizontal(|ui| {
+                label(ui, "Google Calendar syncs through macOS Calendar.", 12.0, MUTED);
+                if small_button(ui, "Connect Calendar").clicked() {
+                    #[cfg(target_os = "macos")]
+                    unsafe { nooklet_calendar_connect(); }
+                    self.last_calendar_poll = Instant::now() - Duration::from_secs(35);
+                }
+            });
+            ui.add_space(8.0);
+        }
         card().show(ui, |ui| {
             ui.horizontal(|ui| {
                 label(ui, &month_year, 20.0, TEXT);
                 ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                     if small_button(ui, "›").clicked() {
                         self.calendar_offset = (self.calendar_offset + 1).min(24);
+                        self.calendar_events.clear();
+                        self.calendar_query_pending = true;
+                        self.last_calendar_poll = Instant::now() - Duration::from_secs(35);
                     }
                     if small_button(ui, "‹").clicked() {
                         self.calendar_offset = (self.calendar_offset - 1).max(-24);
+                        self.calendar_events.clear();
+                        self.calendar_query_pending = true;
+                        self.last_calendar_poll = Instant::now() - Duration::from_secs(35);
                     }
                 });
             });
             ui.add_space(12.0);
-            ui.label(RichText::new(month).monospace().size(15.0).color(TEXT));
+            if month.days_in_month == 0 {
+                label(ui, "Calendar is unavailable", 13.0, MUTED);
+            } else {
+                let width = ((ui.available_width() - 5.0 * 6.0) / 7.0).max(32.0);
+                let first = month.first_weekday as i32;
+                let days = month.days_in_month as i32;
+                let weeks = ((first + days + 6) / 7).clamp(4, 6);
+                egui::Grid::new("bookland-calendar-days")
+                    .spacing([5.0, 3.0])
+                    .show(ui, |ui| {
+                        for name in ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] {
+                            ui.add_sized([width, 16.0], egui::Label::new(
+                                RichText::new(name).size(11.0).color(MUTED)).halign(Align::Center));
+                        }
+                        ui.end_row();
+                        for row in 0..weeks {
+                            for column in 0..7 {
+                                let day = row * 7 + column - first + 1;
+                                let (rect, response) = ui.allocate_exact_size(
+                                    Vec2::new(width, 32.0), egui::Sense::click());
+                                if day >= 1 && day <= days {
+                                    let day = day as u32;
+                                    let selected = self.calendar_selected_day == Some(day);
+                                    let today = month.today == day;
+                                    if selected || today || response.hovered() {
+                                        let fill = if selected {
+                                            Color32::from_rgba_unmultiplied(198, 217, 255, 92)
+                                        } else if today {
+                                            Color32::from_rgba_unmultiplied(198, 217, 255, 40)
+                                        } else {
+                                            Color32::from_rgba_unmultiplied(255, 255, 255, 16)
+                                        };
+                                        ui.painter().rect_filled(rect.shrink(1.0), 9.0, fill);
+                                    }
+                                    ui.painter().text(
+                                        rect.center() - Vec2::new(0.0, 3.0), Align2::CENTER_CENTER,
+                                        day.to_string(), FontId::proportional(14.0),
+                                        if selected || today { TEXT } else { MUTED });
+                                    if day_counts[day as usize] != 0 {
+                                        ui.painter().circle_filled(
+                                            egui::pos2(rect.center().x, rect.bottom() - 5.0),
+                                            2.5, ACCENT);
+                                    }
+                                    response.widget_info(|| egui::WidgetInfo::labeled(
+                                        egui::WidgetType::Button, true,
+                                        &format!("{} {}, {} event{}", day, month_year,
+                                            day_counts[day as usize],
+                                            if day_counts[day as usize] == 1 { "" } else { "s" })));
+                                    if response.clicked() {
+                                        self.calendar_selected_day = if selected { None } else { Some(day) };
+                                    }
+                                    if day_counts[day as usize] != 0 {
+                                        response.on_hover_text(format!("{} event{}", day_counts[day as usize],
+                                            if day_counts[day as usize] == 1 { "" } else { "s" }));
+                                    }
+                                }
+                            }
+                            ui.end_row();
+                        }
+                    });
+            }
         });
         ui.add_space(12.0);
         if small_button(ui, "Open Calendar").clicked() {
             let _ = Command::new("open").args(["-a", "Calendar"]).spawn();
         }
+        if self.calendar_status == 1 {
+            ui.add_space(10.0);
+            let previous_id = self.prefs.calendar_id.clone();
+            let selected = self.calendar_choices.iter()
+                .find(|choice| choice.id == self.prefs.calendar_id);
+            let selected_label = selected.map(|choice|
+                format!("{} · {}", choice.source, choice.title))
+                .unwrap_or_else(|| if self.prefs.calendar_id.is_empty() {
+                    "All Mac calendars".into()
+                } else { "Selected calendar unavailable".into() });
+            card().show(ui, |ui| {
+                section_title(ui, "CALENDAR SOURCE");
+                egui::ComboBox::from_id_salt("calendar-source")
+                    .selected_text(selected_label)
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut self.prefs.calendar_id,
+                            String::new(), "All Mac calendars");
+                        for choice in &self.calendar_choices {
+                            let label = format!("{} · {}{}", choice.source,
+                                choice.title, if choice.writable { "" } else { " (read-only)" });
+                            ui.selectable_value(&mut self.prefs.calendar_id,
+                                choice.id.clone(), label);
+                        }
+                    });
+                label(ui, "Google calendars added to macOS Calendar appear here.", 11.0, MUTED);
+                if self.calendar_choices.is_empty() {
+                    label(ui, "No synced calendars found. Add your Google account in macOS Calendar.",
+                        11.0, MUTED);
+                }
+            });
+            if self.prefs.calendar_id != previous_id {
+                self.calendar_events.clear();
+                self.calendar_query_pending = true;
+                self.last_calendar_poll = Instant::now() - Duration::from_secs(35);
+            }
+        }
         ui.add_space(12.0);
         card().show(ui, |ui| {
-            section_title(ui, "UPCOMING EVENTS");
+            let selected_key = self.calendar_selected_day.map(|day|
+                format!("{:04}-{:02}-{:02}", month.year, month.month, day));
+            let heading = self.calendar_selected_day.map(|day|
+                format!("EVENTS · {} {}", day, month_year))
+                .unwrap_or_else(|| "UPCOMING EVENTS".into());
+            section_title(ui, &heading);
             match self.calendar_status {
                 1 => {
-                    if self.calendar_events.is_empty() {
-                        label(ui, "No events in the next 45 days", 13.0, MUTED);
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|time| time.as_secs_f64()).unwrap_or(0.0);
+                    let visible: Vec<_> = self.calendar_events.iter()
+                        .filter(|event| selected_key.as_ref().map_or(
+                            event.end >= now && event.start <= now + 86400.0 * 45.0,
+                            |key| &event.day_key == key))
+                        .take(8).collect();
+                    if self.calendar_query_pending && visible.is_empty() {
+                        label(ui, "Loading events…", 13.0, MUTED);
+                    } else if visible.is_empty() {
+                        label(ui, if selected_key.is_some() { "No events on this day" }
+                            else { "No events in the next 45 days" }, 13.0, MUTED);
                     }
-                    for event in self.calendar_events.iter().take(8) {
-                        label(ui, &format!("{}  ·  {}", event.title, event.display_time), 13.0, TEXT);
+                    for event in visible {
+                        ui.horizontal(|ui| {
+                            label(ui, &event.display_time, 12.0, MUTED);
+                            ui.add_space(9.0);
+                            music_text(ui, &event.title, 13.0, TEXT, false, true);
+                        });
                         label(ui, &event.calendar, 11.0, MUTED);
-                        ui.add_space(6.0);
+                        ui.add_space(8.0);
                     }
                 }
                 2 => label(ui, "Calendar access is off. Enable it in macOS Privacy & Security settings.", 12.0, MUTED),
                 _ => {
-                    label(ui, "Connect Calendar to show and add your events.", 12.0, MUTED);
-                    if small_button(ui, "Connect Calendar").clicked() {
-                        #[cfg(target_os = "macos")]
-                        unsafe { nooklet_calendar_connect(); }
-                        self.last_calendar_poll = Instant::now() - Duration::from_secs(35);
-                    }
+                    label(ui, "To use Google Calendar, add your Google account in Calendar → Add Account, then connect Bookland.", 12.0, MUTED);
                 }
             }
         });
         if self.calendar_status == 1 {
             ui.add_space(10.0);
+            let selected_writable = !self.prefs.calendar_id.is_empty()
+                && self.calendar_choices.iter().find(|choice|
+                    choice.id == self.prefs.calendar_id).is_some_and(|choice| choice.writable);
             card().show(ui, |ui| {
                 section_title(ui, "ADD EVENT");
+                if !selected_writable {
+                    label(ui, "Choose a writable Google calendar to add events.", 11.0, MUTED);
+                }
                 ui.add(egui::TextEdit::singleline(&mut self.new_event_title).hint_text("Event title"));
                 ui.horizontal(|ui| {
                     ui.add(egui::TextEdit::singleline(&mut self.new_event_date).desired_width(110.0).hint_text("YYYY-MM-DD"));
                     ui.add(egui::TextEdit::singleline(&mut self.new_event_time).desired_width(70.0).hint_text("HH:MM"));
                     ui.add(egui::DragValue::new(&mut self.new_event_minutes).range(5..=1440).suffix(" min"));
                 });
-                if small_button(ui, "Add to Calendar").clicked() {
+                if ui.add_enabled(selected_writable, egui::Button::new("Add to Calendar")).clicked() {
                     let when = format!("{} {}", self.new_event_date.trim(), self.new_event_time.trim());
                     let start = run_output("date", &["-j", "-f", "%Y-%m-%d %H:%M", &when, "+%s"])
                         .and_then(|value| value.parse::<f64>().ok());
                     #[cfg(target_os = "macos")]
+                    let selected_id = CString::new(self.prefs.calendar_id.as_str()).ok();
+                    #[cfg(target_os = "macos")]
                     let saved = start.and_then(|start| CString::new(self.new_event_title.trim()).ok()
-                        .map(|title| unsafe { nooklet_calendar_add(title.as_ptr(), start, self.new_event_minutes as f64 * 60.0) != 0 }))
+                        .map(|title| unsafe { nooklet_calendar_add(title.as_ptr(), start,
+                            self.new_event_minutes as f64 * 60.0,
+                            selected_id.as_ref().map_or(std::ptr::null(), |value| value.as_ptr())) != 0 }))
                         .unwrap_or(false);
                     #[cfg(not(target_os = "macos"))]
                     let saved = false;

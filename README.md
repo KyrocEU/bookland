@@ -13,7 +13,7 @@ Bookland is an independent project inspired by the hover island in NotchNook. It
 | Hover shell | Closed top-edge strip, hover and click opening, close on pointer leave, workspace pill, touchpad scroll gestures, optional haptic feedback, configurable appearance and timing. |
 | Nook | Media controls and artwork, selectable CPU/RAM/GPU/Battery/Disk Pulse cards, Pomodoro and stopwatch, To-dos, and optional widgets for notes, downloads, clipboard, weather, terminal, and camera mirror. |
 | Music | Current macOS media session, including supported browser playback; Apple Music or Spotify can be selected as sources. There are playback controls, a seek bar, optional synced lyrics, an on-demand Apple Music playlist preview under Playing Next, Apple Music AirPlay output controls, system volume, and AirPods connection and battery readings when macOS reports them. A brief closed-island cue appears after a detected AirPods connection change. Song and artist labels use bidirectional text ordering. |
-| Calendar | Upcoming events and event creation through macOS EventKit after the user grants Calendar access. |
+| Calendar | A month grid with event dots and day filtering, plus upcoming events from macOS Calendar, including synced Google calendars. Hebrew titles retain right-to-left reading order beside English dates. Select a calendar to create events in that account after granting Bookland Calendar access. |
 | Tray and Pocket | Recent files, a floating drag-and-drop Pocket, independent file copies, image conversion, AirDrop handoff, and user-initiated YouTube video downloads through yt-dlp. |
 | Clipboard | Searchable text, link, color, image, and Finder-file cards with favorites and privacy controls. Optional local persistence excludes image payloads. |
 | Agents | Recent local Codex, Claude Code, and optional external activity feed; task progress, usage information when available, and a compact decision view for Bookland-connected Codex turns. |
@@ -23,6 +23,10 @@ Bookland is an independent project inspired by the hover island in NotchNook. It
 The default Glass Nook is a single wide row. Music, Calendar, Tray, and the optional workspaces open as compact top-edge panels. The Agents hover panel uses a compact Progress/Usage layout. Its activity bubble opens the Codex app for ordinary desktop tasks; if a Bookland-connected turn asks for a decision, the bubble opens that request inside the same island. On Macs with a camera notch, the closed strip measures the cutout and leaves space for its status symbols on either side.
 
 Settings → General → Onboarding tour opens a seven-page walkthrough of the island and its main workspaces. Each page can open the corresponding workspace directly; the final page links to Appearance settings.
+
+### Google Calendar on your Mac
+
+Bookland uses macOS Calendar's account connection. In the Calendar app, choose **Calendar → Add Account → Google** and finish Google's sign-in. If the account is already in **System Settings → Internet Accounts**, check that **Calendars** is on and complete any Google reauthentication request. Then open Bookland's Calendar workspace, choose **Connect Calendar** to grant macOS Calendar access, and select the Google calendar under **Calendar Source**. Bookland shows events from that selection and saves new events to the selected writable calendar. It searches for events on a background queue while the Calendar workspace is open. The Google Calendar connection in Codex or ChatGPT is separate and does not grant Bookland access. Bookland does not store a Google password or OAuth token.
 
 The closed activity ring runs in a macOS Core Animation layer so it moves between Bookland's low-frequency idle redraws. The opening and closing outline uses sampled spring paths in a native Core Animation shape layer. The host display link requests 30 fps while only that outline moves and 60 fps during the glass and content reveal, then pauses when the shell settles. The shell morphs inside a stable host window and native glass is revealed as the panel expands. The closed shell has PNG-shaped rounded shoulders and a solid black center aligned with the physical camera cutout. The transparent host window adds no rectangular tint or outline.
 
@@ -52,7 +56,7 @@ sh package.sh
 open Bookland.app
 ```
 
-`package.sh` downloads the official yt-dlp macOS executable only if it is missing, verifies its SHA-256 hash, builds the Release app and bundled MediaRemote Adapter, and applies a local ad-hoc signature. This source build is **not notarized**. If macOS blocks it on first launch, inspect the standard macOS Open Anyway flow for locally built apps. The app is a menu-bar-style utility (`LSUIElement`) and draws its window at the screen's top edge rather than opening a normal Dock window.
+`package.sh` downloads the official yt-dlp macOS executable only if it is missing, verifies its SHA-256 hash, builds the Release app and bundled MediaRemote Adapter, and applies a local ad-hoc signature. This source build is **not notarized**. Rebuilding changes that ad-hoc signature, so macOS may ask you to grant Bookland Calendar access again after a rebuild. If macOS blocks it on first launch, inspect the standard macOS Open Anyway flow for locally built apps. The app is a menu-bar-style utility (`LSUIElement`) and draws its window at the screen's top edge rather than opening a normal Dock window.
 
 To keep Bookland running after login, enable **Settings → General → Launch at login**. To tune hover behavior, use **Settings → Behavior → Close after the pointer leaves** and its delay slider. The default delay is 550 ms after leaving the island. Right-click the closed strip for Open Nook, Pocket, workspace editing, and Settings.
 
