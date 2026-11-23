@@ -1758,6 +1758,9 @@ fn spring_frame_dt(elapsed: Duration, target_changed: bool) -> f32 {
         seconds
     }
 }
+fn glass_spring_damping(expanded: bool, reduce_motion: bool) -> f32 {
+    if reduce_motion || !expanded { 1.0 } else { 0.82 }
+}
 #[repr(C)]
 struct NativeMorphFrame {
     x: f64,
@@ -1809,8 +1812,8 @@ fn native_morph_frames(center_x: f32, top_y: f32,
 #[cfg(test)]
 mod hover_gate_tests {
     use std::time::Duration;
-    use super::{hover_allowed_after_close, hover_close_guard, native_morph_frames,
-        spring_frame_dt, spring_step};
+    use super::{glass_spring_damping, hover_allowed_after_close, hover_close_guard,
+        native_morph_frames, spring_frame_dt, spring_step};
 
     #[test]
     fn explicit_close_requires_pointer_exit_before_hover_reopens() {
@@ -1864,6 +1867,17 @@ mod hover_gate_tests {
         assert!(frames.iter().all(|frame| frame.y == 0.0));
         assert_eq!(frames.first().unwrap().opacity, 1.0);
         assert_eq!(frames.last().unwrap().opacity, 0.0);
+    }
+    #[test]
+    fn glass_close_from_rest_settles_without_a_rebound() {
+        assert_eq!(glass_spring_damping(true, false), 0.82);
+        assert_eq!(glass_spring_damping(false, false), 1.0);
+        assert_eq!(glass_spring_damping(true, true), 1.0);
+        let frames = native_morph_frames(300.0, 0.0, (255.0, 33.0),
+            (585.0, 230.0), 1.0, 0.0, 0.0,
+            std::f32::consts::TAU / 0.5, glass_spring_damping(false, false));
+        assert!(frames.windows(2).all(|pair| pair[1].width <= pair[0].width));
+        assert_eq!(frames.last().unwrap().width, 255.0);
     }
 }
 #[cfg(test)]
@@ -2574,7 +2588,8 @@ impl DeskApp {
                             std::f32::consts::TAU
                                 * self.prefs.animation_speed.clamp(0.5, 2.0)
                                 / if nooklet_reduce_motion() != 0 { 0.25 } else { 0.5 },
-                            if nooklet_reduce_motion() != 0 { 1.0 } else { 0.82 });
+                            glass_spring_damping(self.expanded,
+                                nooklet_reduce_motion() != 0));
                         let duration = (frames.len() - 1) as f64 / 60.0;
                         if nooklet_morph_shell_animate(frames.as_ptr(), frames.len(), duration,
                             f64::from(open_width + 30.0),
@@ -8808,13 +8823,12 @@ impl eframe::App for DeskApp {
         let reduce_motion = unsafe { nooklet_reduce_motion() != 0 };
         #[cfg(not(target_os = "macos"))]
         let reduce_motion = false;
-        // The original notch shape uses a 0.5 s / 0.82 SwiftUI spring.
-        // Keep the slight overshoot instead of snapping to the open size at
-        // the first crossing. Reduce Motion remains fully damped.
+        // Give the opening a slight overshoot. Settle the closing edge
+        // without a rebound, and fully damp both directions for Reduce Motion.
         let (response, damping) = if reduce_motion {
             (0.25, 1.0)
         } else if self.prefs.style == "Glass" {
-            (0.5, 0.82)
+            (0.5, glass_spring_damping(self.expanded, false))
         } else {
             (if self.expanded { 0.47 } else { 0.4 }, 1.0)
         };
