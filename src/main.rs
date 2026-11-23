@@ -935,7 +935,7 @@ struct DeskApp {
     mirror_sequence: u64,
     mirror_buffer: Vec<u8>,
     artwork_for: Option<(String, String, String)>,
-    artwork_rx: Option<std::sync::mpsc::Receiver<Result<Option<Vec<u8>>, String>>>,
+    artwork_rx: Option<std::sync::mpsc::Receiver<Result<Option<egui::ColorImage>, String>>>,
     artwork_texture: Option<egui::TextureHandle>,
     codex_logo: Option<egui::TextureHandle>,
     bookland_mark: Option<egui::TextureHandle>,
@@ -3610,12 +3610,8 @@ impl DeskApp {
         }
         if let Some(result) = self.artwork_rx.as_ref().and_then(|receiver| receiver.try_recv().ok()) {
             self.artwork_rx = None;
-            self.artwork_texture = result.ok().flatten().and_then(|bytes| {
-                let image = image::load_from_memory(&bytes).ok()?.thumbnail(256, 256).to_rgba8();
-                let pixels = egui::ColorImage::from_rgba_unmultiplied(
-                    [image.width() as usize, image.height() as usize], image.as_raw());
-                Some(ctx.load_texture("current-album-artwork", pixels, egui::TextureOptions::LINEAR))
-            });
+            self.artwork_texture = result.ok().flatten().map(|pixels|
+                ctx.load_texture("current-album-artwork", pixels, egui::TextureOptions::LINEAR));
         }
         let artwork_key = (self.media_app.clone().unwrap_or_default(),
             self.media_title.clone(), self.media_artist.clone());
@@ -3630,7 +3626,7 @@ impl DeskApp {
                     artwork::fetch(&artwork_key.0)
                 } else {
                     system_artwork()
-                };
+                }.map(|image| image.and_then(|bytes| artwork::decode_thumbnail(&bytes)));
                 let _ = sender.send(result);
             });
         } else if !can_fetch_artwork && self.artwork_for.is_some() {
