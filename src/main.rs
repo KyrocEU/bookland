@@ -3396,11 +3396,6 @@ impl DeskApp {
             unsafe {
                 self.calendar_status = nooklet_calendar_status();
                 if self.calendar_status == 1 {
-                    let mut choices = vec![0_u8; 65_536];
-                    let count = nooklet_calendar_calendars_copy(
-                        choices.as_mut_ptr().cast(), choices.len());
-                    self.calendar_choices = serde_json::from_slice(&choices[..count])
-                        .unwrap_or_default();
                     let selected = CString::new(self.prefs.calendar_id.as_str()).ok();
                     self.calendar_snapshot_version = nooklet_calendar_snapshot_version();
                     nooklet_calendar_refresh(selected.as_ref().map_or(
@@ -3419,6 +3414,11 @@ impl DeskApp {
             unsafe {
                 let version = nooklet_calendar_snapshot_version();
                 if version != self.calendar_snapshot_version {
+                    let mut choices = vec![0_u8; 65_536];
+                    let count = nooklet_calendar_calendars_copy(
+                        choices.as_mut_ptr().cast(), choices.len());
+                    self.calendar_choices = serde_json::from_slice(&choices[..count])
+                        .unwrap_or_default();
                     let mut buffer = vec![0_u8; 131_072];
                     let size = nooklet_calendar_copy(buffer.as_mut_ptr().cast(), buffer.len());
                     self.calendar_events = serde_json::from_slice(&buffer[..size])
@@ -4992,7 +4992,8 @@ impl DeskApp {
                     });
                 label(ui, "Google calendars added to macOS Calendar appear here.", 11.0, MUTED);
                 if self.calendar_choices.is_empty() {
-                    label(ui, "No synced calendars found. Add your Google account in macOS Calendar.",
+                    label(ui, if self.calendar_query_pending { "Loading calendars…" }
+                        else { "No synced calendars found. Add your Google account in macOS Calendar." },
                         11.0, MUTED);
                 }
             });

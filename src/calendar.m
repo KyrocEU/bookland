@@ -6,6 +6,7 @@
 static EKEventStore *nookletEventStore;
 static BOOL nookletCalendarPermissionPending;
 static NSString *nookletEventsJSON;
+static NSString *nookletCalendarsJSON;
 static unsigned long long nookletEventsGeneration;
 static unsigned long long nookletEventsVersion;
 static EKEventStore *eventStore(void);
@@ -26,17 +27,11 @@ size_t nooklet_calendar_calendars_copy(char *buffer, size_t capacity) {
         buffer[0] = '\0';
         return 0;
     }
-    NSMutableArray *rows = [NSMutableArray array];
-    for (EKCalendar *calendar in [eventStore() calendarsForEntityType:EKEntityTypeEvent]) {
-        if (rows.count >= 100) break;
-        [rows addObject:@{
-            @"id": calendar.calendarIdentifier ?: @"",
-            @"title": calendar.title ?: @"Calendar",
-            @"source": calendar.source.title ?: @"Mac Calendar",
-            @"writable": @(calendar.allowsContentModifications)
-        }];
+    NSString *snapshot;
+    @synchronized([EKEventStore class]) {
+        snapshot = nookletCalendarsJSON ?: @"[]";
     }
-    NSData *json = [NSJSONSerialization dataWithJSONObject:rows options:0 error:nil];
+    NSData *json = [snapshot dataUsingEncoding:NSUTF8StringEncoding];
     if (!json || json.length >= capacity) { buffer[0] = '\0'; return 0; }
     memcpy(buffer, json.bytes, json.length);
     buffer[json.length] = '\0';
@@ -136,6 +131,21 @@ void nooklet_calendar_refresh(const char *calendarID, int monthOffset) {
     dispatch_async(calendarQueryQueue(), ^{
         @autoreleasepool {
             EKEventStore *store = [EKEventStore new];
+            NSMutableArray *calendarRows = [NSMutableArray array];
+            for (EKCalendar *calendar in [store calendarsForEntityType:EKEntityTypeEvent]) {
+                if (calendarRows.count >= 100) break;
+                [calendarRows addObject:@{
+                    @"id": calendar.calendarIdentifier ?: @"",
+                    @"title": calendar.title ?: @"Calendar",
+                    @"source": calendar.source.title ?: @"Mac Calendar",
+                    @"writable": @(calendar.allowsContentModifications)
+                }];
+            }
+            NSData *calendarsJSON = [NSJSONSerialization
+                dataWithJSONObject:calendarRows options:0 error:nil];
+            NSString *calendarsResult = calendarsJSON
+                ? [[NSString alloc] initWithData:calendarsJSON
+                    encoding:NSUTF8StringEncoding] : @"[]";
             NSArray<EKCalendar *> *calendars = nil;
             if (identifier) {
                 EKCalendar *selected = [store calendarWithIdentifier:identifier];
@@ -201,6 +211,7 @@ void nooklet_calendar_refresh(const char *calendarID, int monthOffset) {
                 ? [[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding] : @"[]";
             @synchronized([EKEventStore class]) {
                 if (generation == nookletEventsGeneration) {
+                    nookletCalendarsJSON = calendarsResult;
                     nookletEventsJSON = result;
                     ++nookletEventsVersion;
                 }
