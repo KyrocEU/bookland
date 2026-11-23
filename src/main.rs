@@ -14,6 +14,7 @@ mod artwork;
 mod codex_bridge;
 use codex_bridge::CodexEvent;
 mod codex_desktop;
+mod clipboard_images;
 mod downloads;
 use downloads::DownloadEntry;
 mod island_gesture;
@@ -397,6 +398,34 @@ struct ClipboardImage {
     favorite: bool,
 }
 
+impl ClipboardImage {
+    fn saved_record(&self) -> clipboard_images::SavedImage {
+        clipboard_images::SavedImage {
+            fingerprint: self.fingerprint, width: self.width,
+            height: self.height, favorite: self.favorite,
+        }
+    }
+}
+
+fn restore_clipboard_images(ctx: &egui::Context,
+                            records: &[clipboard_images::SavedImage]) -> Vec<ClipboardImage> {
+    let Some(directory) = clipboard_images_dir() else { return Vec::new(); };
+    records.iter().take(clipboard_images::MAX_IMAGES).filter_map(|record| {
+        let rgba = clipboard_images::read_image(&directory, record)?;
+        let full = image::RgbaImage::from_raw(record.width as u32,
+            record.height as u32, rgba)?;
+        let thumb = image::imageops::thumbnail(&full, 256, 160);
+        let rgba = full.into_raw();
+        let preview = egui::ColorImage::from_rgba_unmultiplied(
+            [thumb.width() as usize, thumb.height() as usize], thumb.as_raw());
+        let texture = ctx.load_texture(format!("clipboard-{}", record.fingerprint),
+            preview, egui::TextureOptions::LINEAR);
+        Some(ClipboardImage { fingerprint: record.fingerprint,
+            width: record.width, height: record.height, rgba, texture,
+            favorite: record.favorite })
+    }).collect()
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 struct ClipboardFiles {
     paths: Vec<PathBuf>,
@@ -507,6 +536,7 @@ struct AppData {
     pipelines: Vec<pipelines::Pipeline>,
     clipboard: Vec<String>,
     clipboard_files: Vec<ClipboardFiles>,
+    clipboard_images: Vec<clipboard_images::SavedImage>,
     clipboard_favorites: Vec<String>,
     notes: String,
     prompter: String,
@@ -1460,6 +1490,9 @@ fn previous_preferences_path() -> Option<PathBuf> {
 fn data_path() -> Option<PathBuf> {
     preferences_path().and_then(|path| path.parent().map(|parent| parent.join("data.json")))
 }
+fn clipboard_images_dir() -> Option<PathBuf> {
+    data_path().and_then(|path| path.parent().map(|parent| parent.join("ClipboardImages")))
+}
 fn previous_data_path() -> Option<PathBuf> {
     previous_preferences_path().and_then(|path| path.parent().map(|parent| parent.join("data.json")))
 }
@@ -2287,6 +2320,15 @@ impl DeskApp {
         if !preview_mode && screenshot.is_none() {
             codex_desktop::recover_pending_async();
         }
+        let clipboard_images = if prefs.persist_clipboard && !preview_mode
+            && screenshot.is_none() {
+            restore_clipboard_images(&repaint_context, &data.clipboard_images)
+        } else { Vec::new() };
+        if !prefs.persist_clipboard && !preview_mode && screenshot.is_none() {
+            if let Some(directory) = clipboard_images_dir() {
+                clipboard_images::prune(&directory, &[]);
+            }
+        }
         let expanded = screenshot.is_some() || preview_mode || prefs.start_expanded;
         let now = Instant::now();
         let (media_action_tx, media_action_rx) = std::sync::mpsc::channel();
@@ -2346,7 +2388,7 @@ impl DeskApp {
             battery_history: VecDeque::new(),
             disk_history: VecDeque::new(),
             clipboard: data.clipboard,
-            clipboard_images: Vec::new(),
+            clipboard_images,
             clipboard_files: data.clipboard_files,
             clipboard_favorites: data.clipboard_favorites,
             clipboard_search: String::new(),
@@ -2684,11 +2726,22 @@ impl DeskApp {
     }
     fn save_data(&self) {
         if self.preview_mode || self.screenshot.is_some() { return; }
+        let saved_images = if self.prefs.persist_clipboard {
+            if let Some(directory) = clipboard_images_dir() {
+                self.clipboard_images.iter().take(clipboard_images::MAX_IMAGES)
+                    .filter_map(|image| {
+                        let record = image.saved_record();
+                        clipboard_images::write_image(&directory, &record, &image.rgba)
+                            .ok().map(|_| record)
+                    }).collect::<Vec<_>>()
+            } else { Vec::new() }
+        } else { Vec::new() };
         let data = AppData {
             files: self.files.clone(),
             pipelines: self.pipelines.clone(),
             clipboard: if self.prefs.persist_clipboard { self.clipboard.clone() } else { Vec::new() },
             clipboard_files: if self.prefs.persist_clipboard { self.clipboard_files.clone() } else { Vec::new() },
+            clipboard_images: saved_images.clone(),
             clipboard_favorites: if self.prefs.persist_clipboard { self.clipboard_favorites.clone() } else { Vec::new() },
             notes: self.notes.clone(),
             prompter: self.prompter.clone(),
@@ -2704,8 +2757,11 @@ impl DeskApp {
             if let Some(parent) = path.parent() {
                 if std::fs::create_dir_all(parent).is_ok() {
                     let temp = path.with_extension("json.tmp");
-                    if std::fs::write(&temp, json).is_ok() {
-                        let _ = std::fs::rename(temp, path);
+                    if std::fs::write(&temp, json).is_ok()
+                        && std::fs::rename(temp, path).is_ok() {
+                        if let Some(directory) = clipboard_images_dir() {
+                            clipboard_images::prune(&directory, &saved_images);
+                        }
                     }
                 }
             }
@@ -3471,11 +3527,15 @@ impl DeskApp {
                                     [thumb.width() as usize, thumb.height() as usize], thumb.as_raw());
                                 let texture = ctx.load_texture(format!("clipboard-{fingerprint}"),
                                     color_image, egui::TextureOptions::LINEAR);
+                                let favorite = self.clipboard_images.iter()
+                                    .find(|item| item.fingerprint == fingerprint)
+                                    .is_some_and(|item| item.favorite);
                                 self.clipboard_images.retain(|item| item.fingerprint != fingerprint);
                                 self.clipboard_images.insert(0, ClipboardImage {
-                                    fingerprint, width, height, rgba: bytes, texture, favorite: false,
+                                    fingerprint, width, height, rgba: bytes, texture, favorite,
                                 });
-                                self.clipboard_images.truncate(8);
+                                self.clipboard_images.truncate(clipboard_images::MAX_IMAGES);
+                                if self.prefs.persist_clipboard { self.save_data(); }
                             }
                         }
                     }
@@ -4356,12 +4416,14 @@ impl DeskApp {
         }
         if let Some(index) = favorite_image {
             if let Some(image) = self.clipboard_images.get_mut(index) { image.favorite = !image.favorite; }
+            if self.prefs.persist_clipboard { self.save_data(); }
         }
         if let Some(index) = remove_image {
             let image = self.clipboard_images.remove(index);
             if self.last_image_fingerprint == Some(image.fingerprint) {
                 self.last_image_fingerprint = None;
             }
+            if self.prefs.persist_clipboard { self.save_data(); }
         }
         if let Some(item) = copy {
             if arboard::Clipboard::new().and_then(|mut clipboard| clipboard.set_text(item.clone())).is_ok() {
@@ -8154,7 +8216,8 @@ impl DeskApp {
                 section_title(ui, "HISTORY");
                 card().show(ui, |ui| {
                     ui.checkbox(&mut self.prefs.capture_clipboard, "Capture automatically");
-                    if ui.checkbox(&mut self.prefs.persist_clipboard, "Save history on this Mac").changed() {
+                    if ui.checkbox(&mut self.prefs.persist_clipboard,
+                        "Save history, including images, on this Mac").changed() {
                         self.save_data();
                     }
                     if ui.add(egui::Slider::new(&mut self.prefs.clipboard_history_size, 25..=1000)
@@ -8751,6 +8814,7 @@ impl Drop for DeskApp {
         if self.prefs.clipboard_clear_on_quit && !self.preview_mode {
             let favorites = self.clipboard_favorites.clone();
             self.clipboard.retain(|item| favorites.contains(item));
+            self.clipboard_images.retain(|item| item.favorite);
             self.clipboard_files.retain(|item| item.favorite);
             self.save_data();
         }
