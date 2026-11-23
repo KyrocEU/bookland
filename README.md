@@ -12,7 +12,7 @@ Bookland is an independent project inspired by the hover island in NotchNook. It
 | --- | --- |
 | Hover shell | Closed top-edge strip, hover and click opening, close on pointer leave, workspace pill, touchpad scroll gestures, optional haptic feedback, configurable appearance and timing. |
 | Nook | Media controls and artwork, selectable CPU/RAM/GPU/Battery/Disk Pulse cards, Pomodoro and stopwatch, To-dos, and optional widgets for notes, downloads, clipboard, weather, terminal, and camera mirror. |
-| Music | Current macOS media session, including supported browser playback; Apple Music or Spotify can be selected as sources. There are playback controls, a seek bar, optional synced lyrics, Apple Music AirPlay output controls, system volume, and AirPods connection and battery readings when macOS reports them. Song and artist labels use bidirectional text ordering. |
+| Music | Current macOS media session, including supported browser playback; Apple Music or Spotify can be selected as sources. There are playback controls, a seek bar, optional synced lyrics, Apple Music AirPlay output controls, system volume, and AirPods connection and battery readings when macOS reports them. A brief closed-island cue appears after a detected AirPods connection change. Song and artist labels use bidirectional text ordering. |
 | Calendar | Upcoming events and event creation through macOS EventKit after the user grants Calendar access. |
 | Tray and Pocket | Recent files, a floating drag-and-drop Pocket, independent file copies, image conversion, AirDrop handoff, and user-initiated YouTube video downloads through yt-dlp. |
 | Clipboard | Searchable text, link, color, image, and Finder-file cards with favorites and privacy controls. Optional local persistence excludes image payloads. |
@@ -34,7 +34,7 @@ Bookland also accepts an optional local JSON feed from other tools. See [AGENT_F
 
 System media reads use Apple's private MediaRemote framework, and system playback controls use a bundled MediaRemote Adapter helper launched on demand. That path can change with macOS releases. Apple Music and Spotify actions use local automation. Lyrics lookup sends the playing song title and artist to LRCLIB only when synced lyrics are enabled. A video URL is sent to yt-dlp only after the user clicks Download. Codex uses the installed local Codex app and its configured service. Bookland has no separate cloud account or telemetry service.
 
-Camera, microphone/speech, Calendar, and global shortcuts are opt-in. Clipboard history is kept in memory by default. If local clipboard persistence is enabled, text and Finder-file references are saved under `~/Library/Application Support/Bookland/`; image payloads stay in memory. Items that macOS or supported password managers mark as confidential or temporary are skipped. Untagged sensitive text cannot always be recognized, so the clipboard privacy controls should be used with care.
+Camera, microphone/speech, Calendar, and global shortcuts are opt-in. AirPods status uses a periodic local Bluetooth report; where macOS has already granted Bookland Bluetooth access, connection events trigger an immediate refresh and reduce idle polling. Clipboard history is kept in memory by default. If local clipboard persistence is enabled, text and Finder-file references are saved under `~/Library/Application Support/Bookland/`; image payloads stay in memory. Items that macOS or supported password managers mark as confidential or temporary are skipped. Untagged sensitive text cannot always be recognized, so the clipboard privacy controls should be used with care.
 
 ## Build and run
 
@@ -68,7 +68,7 @@ The editable Bookland logo, app icon, banner, and GitHub social preview are in [
 
 ## Current limits
 
-This is a working preview with gaps. AirPlay route changes, real AirPods battery display, physical trackpad haptics, live microphone-following, the new volume card's on-screen appearance, and some permission-dependent flows have not been verified end to end on every Mac. Brightness HUD replacement is not implemented. The hover island and major workspaces have been exercised in the signed app, but macOS 26 compatibility and use of private media APIs can vary by system version. Open issues or contribute test results with the exact macOS version and hardware model.
+This is a working preview with gaps. AirPlay route changes, real AirPods battery and connection cues, physical trackpad haptics, live microphone-following, the new volume card's on-screen appearance, and some permission-dependent flows have not been verified end to end on every Mac. Brightness HUD replacement is not implemented. The hover island and major workspaces have been exercised in the signed app, but macOS 26 compatibility and use of private media APIs can vary by system version. Open issues or contribute test results with the exact macOS version and hardware model.
 
 ## License
 

@@ -55,6 +55,8 @@ unsafe extern "C" {
     fn nooklet_physical_notch(width: *mut f64, height: *mut f64) -> i32;
     fn nooklet_progress_ring_set(enabled: i32, x: f64, y: f64);
     fn bookland_volume_hud_set(enabled: i32);
+    fn bookland_airpods_watch_set(enabled: i32) -> i32;
+    fn bookland_airpods_events_take() -> i32;
     fn bookland_scroll_take(delta_x: *mut f64, delta_y: *mut f64) -> i32;
     fn bookland_haptic_feedback();
     fn nooklet_hover_monitor_set(enabled: i32, context: *mut std::ffi::c_void,
@@ -614,6 +616,8 @@ struct DeskApp {
     hover_monitor_enabled: bool,
     animation_clock_enabled: bool,
     volume_hud_monitor_enabled: bool,
+    airpods_events_attempted: bool,
+    airpods_events_enabled: bool,
     pocket_wake_context: Box<egui::Context>,
     notes: String,
     note_export_rx: Option<std::sync::mpsc::Receiver<Result<(), String>>>,
@@ -670,6 +674,9 @@ struct DeskApp {
     airpods: AirPodsStatus,
     airpods_rx: Option<std::sync::mpsc::Receiver<AirPodsStatus>>,
     last_airpods_poll: Instant,
+    airpods_refresh_pending: bool,
+    airpods_baseline_seen: bool,
+    airpods_activity: Option<(String, Instant)>,
     calendar_offset: i32,
     timer_secs: u64,
     timer_end: Option<Instant>,
@@ -2015,6 +2022,8 @@ impl DeskApp {
             hover_monitor_enabled: false,
             animation_clock_enabled: false,
             volume_hud_monitor_enabled: false,
+            airpods_events_attempted: false,
+            airpods_events_enabled: false,
             pocket_wake_context: Box::new(repaint_context),
             notes: data.notes,
             note_export_rx: None,
@@ -2070,7 +2079,10 @@ impl DeskApp {
             last_weather_poll: now - Duration::from_secs(1000),
             airpods: AirPodsStatus::default(),
             airpods_rx: None,
-            last_airpods_poll: now - Duration::from_secs(60),
+            last_airpods_poll: now - Duration::from_secs(600),
+            airpods_refresh_pending: false,
+            airpods_baseline_seen: false,
+            airpods_activity: None,
             calendar_offset: 0,
             timer_secs: 10 * 60,
             timer_end: None,
@@ -2149,6 +2161,11 @@ impl DeskApp {
                 self.native_installed = nooklet_install_glass(self.native_view as *mut _) != 0;
             }
             if self.native_installed {
+                if !self.airpods_events_attempted && !self.preview_mode
+                    && self.screenshot.is_none() {
+                    self.airpods_events_enabled = bookland_airpods_watch_set(1) != 0;
+                    self.airpods_events_attempted = true;
+                }
                 let target = if self.expanded { 1.0 } else { 0.0 };
                 let clock_wanted = self.transition != target && !self.preview_mode
                     && self.screenshot.is_none();
@@ -2655,17 +2672,36 @@ impl DeskApp {
                 self.weather_rx = None;
             }
         }
+        #[cfg(target_os = "macos")]
+        if self.airpods_events_enabled && unsafe { bookland_airpods_events_take() != 0 } {
+            self.airpods_refresh_pending = true;
+        }
         if let Some(receiver) = &self.airpods_rx {
             if let Ok(status) = receiver.try_recv() {
+                if self.airpods_baseline_seen {
+                    if let Some(label) = airpods::connection_activity(&self.airpods, &status) {
+                        self.airpods_activity = Some((label, Instant::now()));
+                    }
+                }
+                self.airpods_baseline_seen = true;
                 self.airpods = status;
                 self.airpods_rx = None;
             }
         }
+        if self.airpods_activity.as_ref().is_some_and(|(_, at)|
+            at.elapsed() >= Duration::from_secs(4)) {
+            self.airpods_activity = None;
+        }
+        let airpods_interval = if self.airpods_events_enabled {
+            if self.airpods.name.is_some() { 60 } else { 300 }
+        } else { 30 };
         if self.airpods_rx.is_none()
-            && self.last_airpods_poll.elapsed() >= Duration::from_secs(30) {
+            && (self.airpods_refresh_pending ||
+                self.last_airpods_poll.elapsed() >= Duration::from_secs(airpods_interval)) {
             let (tx, rx) = std::sync::mpsc::channel();
             self.airpods_rx = Some(rx);
             self.last_airpods_poll = Instant::now();
+            self.airpods_refresh_pending = false;
             std::thread::spawn(move || { let _ = tx.send(airpods::fetch()); });
         }
         if self.prefs.widgets.contains(&Widget::Weather)
@@ -6353,7 +6389,12 @@ impl DeskApp {
             .show(ui, |ui| {
                 ui.set_width(width - 30.0);
                 ui.set_min_height(height - 8.0);
-                if let Some(done) = &self.agent_completion {
+                if let Some((activity, _)) = &self.airpods_activity {
+                    ui.horizontal(|ui| {
+                        label(ui, "●", 11.0, Color32::from_rgb(125, 222, 164));
+                        label(ui, activity, 12.0, TEXT);
+                    });
+                } else if let Some(done) = &self.agent_completion {
                     ui.horizontal(|ui| {
                         label(ui, "✦", 13.0, ACCENT);
                         label(ui, &format!("{} finished", done.source), 12.0, TEXT);
@@ -7429,6 +7470,7 @@ impl Drop for DeskApp {
             if self.animation_clock_enabled {
                 nooklet_animation_clock_set(0, std::ptr::null_mut(), None);
             }
+            if self.airpods_events_enabled { bookland_airpods_watch_set(0); }
         }
         if self.prefs.clipboard_clear_on_quit && !self.preview_mode {
             let favorites = self.clipboard_favorites.clone();

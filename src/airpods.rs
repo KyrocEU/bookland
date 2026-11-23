@@ -35,6 +35,16 @@ impl AirPodsStatus {
     }
 }
 
+pub fn connection_activity(previous: &AirPodsStatus, current: &AirPodsStatus) -> Option<String> {
+    match (previous.name.as_deref(), current.name.as_deref()) {
+        (None, Some(_)) | (Some(_), Some(_)) if previous.name != current.name =>
+            Some(current.compact_battery().map(|battery| format!("AirPods · {battery}"))
+                .unwrap_or_else(|| "AirPods connected".into())),
+        (Some(_), None) => Some("AirPods disconnected".into()),
+        _ => None,
+    }
+}
+
 fn percentage(value: &Value) -> Option<u8> {
     let number = value.as_u64().or_else(|| value.as_str()
         .and_then(|text| text.trim().trim_end_matches('%').parse::<u64>().ok()))?;
@@ -114,5 +124,17 @@ mod tests {
         let status = AirPodsStatus { name: Some("AirPods Max".into()), overall: Some(72),
             ..Default::default() };
         assert_eq!(status.compact_label().as_deref(), Some("AirPods Max · 72%"));
+    }
+    #[test]
+    fn connection_cue_tracks_changes_without_repeating_battery_polls() {
+        let disconnected = AirPodsStatus::default();
+        let connected = AirPodsStatus { name: Some("AirPods Pro".into()),
+            left: Some(63), right: Some(58), ..Default::default() };
+        assert_eq!(connection_activity(&disconnected, &connected).as_deref(),
+            Some("AirPods · L63% R58%"));
+        let newer_battery = AirPodsStatus { left: Some(62), ..connected.clone() };
+        assert!(connection_activity(&connected, &newer_battery).is_none());
+        assert_eq!(connection_activity(&connected, &disconnected).as_deref(),
+            Some("AirPods disconnected"));
     }
 }
