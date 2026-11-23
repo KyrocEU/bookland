@@ -760,6 +760,7 @@ struct DeskApp {
     files: Vec<PathBuf>,
     pocket_job: Option<PocketJob>,
     pocket_status: String,
+    pocket_activity: Option<(String, bool, Instant)>,
     drag_shake: shake::DragShake,
     pocket_floating: bool,
     pocket_anchor: egui::Pos2,
@@ -2091,7 +2092,9 @@ fn section_title(ui: &mut egui::Ui, text: &str) {
 
 impl DeskApp {
     fn open_from_hover(&mut self) {
-        if let Some(done) = self.agent_completion.take() {
+        if self.pocket_job.is_some() || self.pocket_activity.is_some() {
+            self.choose_hover_workspace();
+        } else if let Some(done) = self.agent_completion.take() {
             self.workspace = Workspace::Agents;
             self.agent_chat_open = false;
             self.agent_usage_view = false;
@@ -2108,6 +2111,10 @@ impl DeskApp {
     }
 
     fn choose_hover_workspace(&mut self) {
+        if self.pocket_job.is_some() || self.pocket_activity.take().is_some() {
+            self.workspace = Workspace::Tray;
+            return;
+        }
         if self.workspace_chosen_by_user { return; }
         if let Some(index) = self.prefs.agent_monitor.then(|| self.agents.iter()
             .position(|agent| agent.source == "Codex" && agent.status == "Working"))
@@ -2299,6 +2306,7 @@ impl DeskApp {
             files: data.files,
             pocket_job: None,
             pocket_status: String::new(),
+            pocket_activity: None,
             drag_shake: shake::DragShake::default(),
             pocket_floating: false,
             pocket_anchor: egui::pos2(320.0, 80.0),
@@ -2666,6 +2674,7 @@ impl DeskApp {
             let _ = sender.send(pocket::execute(action, &copy, &root));
         });
         self.pocket_job = Some(PocketJob { source, action, receiver });
+        self.pocket_activity = None;
         self.pocket_status = match action {
             pocket::Action::Keep => "Keeping a copy…",
             pocket::Action::Png | pocket::Action::Jpeg |
@@ -2688,6 +2697,12 @@ impl DeskApp {
             let job = self.pocket_job.take().unwrap();
             match result {
                 Ok(path) => {
+                    let short = match job.action {
+                        pocket::Action::Keep => "Copy".into(),
+                        pocket::Action::Zip => "ZIP".into(),
+                        _ => path.extension().and_then(|value| value.to_str())
+                            .unwrap_or("File").to_ascii_uppercase(),
+                    };
                     if job.action == pocket::Action::Keep {
                         self.files.retain(|item| item != &job.source);
                     }
@@ -2709,13 +2724,19 @@ impl DeskApp {
                         pocket::Action::Html => "Converted to HTML in Pocket",
                         pocket::Action::Zip => "Created ZIP in Pocket",
                     }.into();
+                    self.pocket_activity = Some((format!("{short} ready"), true, Instant::now()));
                     self.notify(self.pocket_status.clone());
                 }
                 Err(error) => {
                     self.pocket_status = format!("Pocket: {error}");
+                    self.pocket_activity = Some(("File action failed".into(), false, Instant::now()));
                     self.notify(self.pocket_status.clone());
                 }
             }
+        }
+        if self.pocket_activity.as_ref().is_some_and(|(_, _, at)|
+            at.elapsed() >= Duration::from_secs(6)) {
+            self.pocket_activity = None;
         }
     }
     fn start_video_download(&mut self, input: &str) {
@@ -7060,6 +7081,20 @@ impl DeskApp {
                         label(ui, "●", 11.0, Color32::from_rgb(125, 222, 164));
                         label(ui, activity, 12.0, TEXT);
                     });
+                } else if self.pocket_job.is_some() {
+                    let (strip, _) = ui.allocate_exact_size(
+                        Vec2::new(width - 30.0, height - 8.0), egui::Sense::hover());
+                    let right = strip.right_center() - Vec2::new(8.0, 0.0);
+                    self.native_ring_center = Some(right);
+                    ui.painter().text(strip.left_center() + Vec2::new(8.0, 0.0),
+                        Align2::LEFT_CENTER, "Working…", FontId::proportional(11.0), TEXT);
+                } else if let Some((activity, success, _)) = &self.pocket_activity {
+                    ui.horizontal(|ui| {
+                        label(ui, if *success { "✓" } else { "!" }, 12.0,
+                            if *success { Color32::from_rgb(125, 222, 164) }
+                            else { Color32::from_rgb(249, 164, 120) });
+                        label(ui, activity, 11.0, TEXT);
+                    });
                 } else if let Some(done) = &self.agent_completion {
                     ui.horizontal(|ui| {
                         label(ui, "✦", 13.0, ACCENT);
@@ -7245,7 +7280,9 @@ impl DeskApp {
         let hover_allowed = hover_allowed_after_close(
             &mut self.hover_blocked_until_exit, physically_hovered);
         if response.clicked() {
-            let completion_clicked = if let Some(done) = self.agent_completion.take() {
+            let completion_clicked = if self.pocket_job.is_some() || self.pocket_activity.is_some() {
+                false
+            } else if let Some(done) = self.agent_completion.take() {
                 self.workspace = Workspace::Agents;
                 self.agent_chat_open = false;
                 self.agent_usage_view = false;
