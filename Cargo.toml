@@ -15,6 +15,7 @@ tempfile = "3"
 winit = "0.30"
 raw-window-handle = "0.6"
 unicode-bidi = "0.3.18"
+zip = { version = "9.8.2", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [build-dependencies]
 cc = "1"

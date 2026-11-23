@@ -24,6 +24,7 @@ mod music_airplay;
 use music_airplay::AirPlayDevice;
 mod music_queue;
 mod pocket;
+mod pipelines;
 mod shake;
 mod prompter;
 use lyrics::Line as LyricLine;
@@ -496,6 +497,7 @@ mod codex_chat_tests {
 #[serde(default)]
 struct AppData {
     files: Vec<PathBuf>,
+    pipelines: Vec<pipelines::Pipeline>,
     clipboard: Vec<String>,
     clipboard_files: Vec<ClipboardFiles>,
     clipboard_favorites: Vec<String>,
@@ -512,8 +514,13 @@ struct AppData {
 
 struct PocketJob {
     source: PathBuf,
-    action: pocket::Action,
+    operation: PocketOperation,
     receiver: std::sync::mpsc::Receiver<Result<PathBuf, String>>,
+}
+
+enum PocketOperation {
+    Action(pocket::Action),
+    Pipeline(String),
 }
 
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
@@ -758,6 +765,10 @@ struct DeskApp {
     last_image_fingerprint: Option<u64>,
     last_clip_poll: Instant,
     files: Vec<PathBuf>,
+    pipelines: Vec<pipelines::Pipeline>,
+    pipeline_draft_name: String,
+    pipeline_draft_steps: Vec<pocket::Action>,
+    pipeline_draft_action: pocket::Action,
     pocket_job: Option<PocketJob>,
     pocket_status: String,
     pocket_activity: Option<(String, bool, Instant)>,
@@ -2304,6 +2315,11 @@ impl DeskApp {
             last_image_fingerprint: None,
             last_clip_poll: now,
             files: data.files,
+            pipelines: data.pipelines.into_iter()
+                .filter(|pipeline| pipeline.validate().is_ok()).take(20).collect(),
+            pipeline_draft_name: String::new(),
+            pipeline_draft_steps: Vec::new(),
+            pipeline_draft_action: pocket::Action::Webp,
             pocket_job: None,
             pocket_status: String::new(),
             pocket_activity: None,
@@ -2586,6 +2602,7 @@ impl DeskApp {
         if self.preview_mode || self.screenshot.is_some() { return; }
         let data = AppData {
             files: self.files.clone(),
+            pipelines: self.pipelines.clone(),
             clipboard: if self.prefs.persist_clipboard { self.clipboard.clone() } else { Vec::new() },
             clipboard_files: if self.prefs.persist_clipboard { self.clipboard_files.clone() } else { Vec::new() },
             clipboard_favorites: if self.prefs.persist_clipboard { self.clipboard_favorites.clone() } else { Vec::new() },
@@ -2613,9 +2630,34 @@ impl DeskApp {
     fn notify(&mut self, message: impl Into<String>) {
         self.toast = Some((message.into(), Instant::now()));
     }
+    fn install_pipeline(&mut self, path: &Path) {
+        match pipelines::import(path) {
+            Ok(pipeline) => {
+                if let Some(existing) = self.pipelines.iter_mut()
+                    .find(|item| item.name.eq_ignore_ascii_case(&pipeline.name)) {
+                    *existing = pipeline.clone();
+                } else if self.pipelines.len() < 20 {
+                    self.pipelines.push(pipeline.clone());
+                } else {
+                    self.notify("Remove a pipeline before importing another");
+                    return;
+                }
+                self.save_data();
+                self.pocket_status = format!("Installed pipeline: {}", pipeline.name);
+                self.notify(self.pocket_status.clone());
+            }
+            Err(error) => self.notify(format!("Could not import pipeline: {error}")),
+        }
+    }
     fn remember_pocket_file(&mut self, path: PathBuf, open_tray: bool) {
         if !path.exists() {
             self.notify("That file is no longer available");
+            return;
+        }
+        if path.extension().and_then(|value| value.to_str())
+            .is_some_and(|value| value.eq_ignore_ascii_case("booklandpipeline")) {
+            self.install_pipeline(&path);
+            if open_tray { self.expanded = true; self.workspace = Workspace::Tray; }
             return;
         }
         self.files.retain(|item| item != &path);
@@ -2673,7 +2715,8 @@ impl DeskApp {
         std::thread::spawn(move || {
             let _ = sender.send(pocket::execute(action, &copy, &root));
         });
-        self.pocket_job = Some(PocketJob { source, action, receiver });
+        self.pocket_job = Some(PocketJob { source,
+            operation: PocketOperation::Action(action), receiver });
         self.pocket_activity = None;
         self.pocket_status = match action {
             pocket::Action::Keep => "Keeping a copy…",
@@ -2686,6 +2729,24 @@ impl DeskApp {
             pocket::Action::Zip => "Creating ZIP…",
         }.into();
     }
+    fn start_pocket_pipeline(&mut self, source: PathBuf, pipeline: pipelines::Pipeline) {
+        if self.pocket_job.is_some() || !pipeline.can_run(&source) { return; }
+        let Some(root) = preferences_path().and_then(|path| path.parent()
+            .map(|parent| parent.join("Pocket"))) else {
+            self.notify("Pocket storage is unavailable");
+            return;
+        };
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let copy = source.clone();
+        let name = pipeline.name.clone();
+        std::thread::spawn(move || {
+            let _ = sender.send(pipelines::run(&pipeline, &copy, &root));
+        });
+        self.pocket_job = Some(PocketJob { source,
+            operation: PocketOperation::Pipeline(name.clone()), receiver });
+        self.pocket_activity = None;
+        self.pocket_status = format!("Running pipeline: {name}…");
+    }
     fn poll_pocket(&mut self) {
         use std::sync::mpsc::TryRecvError;
         let result = self.pocket_job.as_ref().and_then(|job| match job.receiver.try_recv() {
@@ -2697,33 +2758,36 @@ impl DeskApp {
             let job = self.pocket_job.take().unwrap();
             match result {
                 Ok(path) => {
-                    let short = match job.action {
-                        pocket::Action::Keep => "Copy".into(),
-                        pocket::Action::Zip => "ZIP".into(),
+                    let short = match &job.operation {
+                        PocketOperation::Action(pocket::Action::Keep) => "Copy".into(),
+                        PocketOperation::Pipeline(_) => "Pipeline".into(),
                         _ => path.extension().and_then(|value| value.to_str())
                             .unwrap_or("File").to_ascii_uppercase(),
                     };
-                    if job.action == pocket::Action::Keep {
+                    if matches!(job.operation, PocketOperation::Action(pocket::Action::Keep)) {
                         self.files.retain(|item| item != &job.source);
                     }
                     self.files.retain(|item| item != &path);
                     self.files.insert(0, path);
                     self.files.truncate(8);
                     self.save_data();
-                    self.pocket_status = match job.action {
-                        pocket::Action::Keep => "Saved a copy in Pocket",
-                        pocket::Action::Png => "Converted to PNG in Pocket",
-                        pocket::Action::Jpeg => "Converted to JPEG in Pocket",
-                        pocket::Action::Heic => "Converted to HEIC in Pocket",
-                        pocket::Action::Tiff => "Converted to TIFF in Pocket",
-                        pocket::Action::Webp => "Converted to WebP in Pocket",
-                        pocket::Action::Aiff => "Converted to AIFF in Pocket",
-                        pocket::Action::Alac => "Converted to ALAC in Pocket",
-                        pocket::Action::Flac => "Converted to FLAC in Pocket",
-                        pocket::Action::Docx => "Converted to DOCX in Pocket",
-                        pocket::Action::Html => "Converted to HTML in Pocket",
-                        pocket::Action::Zip => "Created ZIP in Pocket",
-                    }.into();
+                    self.pocket_status = match job.operation {
+                        PocketOperation::Pipeline(name) => format!("Pipeline complete: {name}"),
+                        PocketOperation::Action(action) => match action {
+                            pocket::Action::Keep => "Saved a copy in Pocket",
+                            pocket::Action::Png => "Converted to PNG in Pocket",
+                            pocket::Action::Jpeg => "Converted to JPEG in Pocket",
+                            pocket::Action::Heic => "Converted to HEIC in Pocket",
+                            pocket::Action::Tiff => "Converted to TIFF in Pocket",
+                            pocket::Action::Webp => "Converted to WebP in Pocket",
+                            pocket::Action::Aiff => "Converted to AIFF in Pocket",
+                            pocket::Action::Alac => "Converted to ALAC in Pocket",
+                            pocket::Action::Flac => "Converted to FLAC in Pocket",
+                            pocket::Action::Docx => "Converted to DOCX in Pocket",
+                            pocket::Action::Html => "Converted to HTML in Pocket",
+                            pocket::Action::Zip => "Created ZIP in Pocket",
+                        }.into(),
+                    };
                     self.pocket_activity = Some((format!("{short} ready"), true, Instant::now()));
                     self.notify(self.pocket_status.clone());
                 }
@@ -4913,6 +4977,14 @@ impl DeskApp {
                     self.open_pocket_near_pointer(ui.ctx());
                 }
             });
+            if !self.pipelines.is_empty() {
+                ui.add_space(6.0);
+                label(ui, &format!("{} saved pipelines", self.pipelines.len()), 11.0, MUTED);
+            }
+            if ui.button("Manage pipelines").clicked() {
+                self.settings_section = "Pocket".into();
+                self.settings_open = true;
+            }
         });
         ui.add_space(13.0);
         section_title(ui, "RECENT FILES · POCKET");
@@ -4956,6 +5028,15 @@ impl DeskApp {
                                     ui.add_enabled(self.pocket_job.is_none(),
                                         egui::Button::new(label)).clicked() {
                                     self.start_pocket_action(path.clone(), action);
+                                    ui.close();
+                                }
+                            }
+                            for pipeline in self.pipelines.clone() {
+                                if pipeline.can_run(&path) && ui.add_enabled(
+                                    self.pocket_job.is_none(), egui::Button::new(
+                                        format!("{} · {}", pipeline.name, pipeline.summary())))
+                                    .clicked() {
+                                    self.start_pocket_pipeline(path.clone(), pipeline);
                                     ui.close();
                                 }
                             }
@@ -5041,6 +5122,15 @@ impl DeskApp {
                                                 ui.add_enabled(self.pocket_job.is_none(),
                                                     egui::Button::new(label)).clicked() {
                                                 self.start_pocket_action(path.clone(), action);
+                                                ui.close();
+                                            }
+                                        }
+                                        for pipeline in self.pipelines.clone() {
+                                            if pipeline.can_run(&path) && ui.add_enabled(
+                                                self.pocket_job.is_none(), egui::Button::new(
+                                                    format!("{} · {}", pipeline.name,
+                                                        pipeline.summary()))).clicked() {
+                                                self.start_pocket_pipeline(path.clone(), pipeline);
                                                 ui.close();
                                             }
                                         }
@@ -7655,6 +7745,110 @@ impl DeskApp {
                         });
                     ui.checkbox(&mut self.prefs.pocket_battery, "Show battery when idle");
                 });
+                ui.add_space(12.0);
+                section_title(ui, "POCKET PIPELINES");
+                card().show(ui, |ui| {
+                    label(ui, "Save a sequence of native file conversions and run it from Pocket. Share it as a .booklandpipeline file.", 12.0, MUTED);
+                    ui.add_space(8.0);
+                    ui.horizontal(|ui| {
+                        label(ui, "Name", 12.0, TEXT);
+                        ui.add(egui::TextEdit::singleline(&mut self.pipeline_draft_name)
+                            .hint_text("Photos to WebP").desired_width(220.0));
+                    });
+                    ui.horizontal(|ui| {
+                        egui::ComboBox::from_id_salt("pipeline_draft_action")
+                            .selected_text(if self.pipeline_draft_action == pocket::Action::Zip {
+                                "ZIP"
+                            } else {
+                                pipelines::CONVERSIONS.iter()
+                                    .find(|(action, _)| *action == self.pipeline_draft_action)
+                                    .map(|(_, title)| *title).unwrap_or("Choose format")
+                            })
+                            .show_ui(ui, |ui| {
+                                for (action, title) in pipelines::CONVERSIONS {
+                                    ui.selectable_value(&mut self.pipeline_draft_action,
+                                        action, title);
+                                }
+                                ui.selectable_value(&mut self.pipeline_draft_action,
+                                    pocket::Action::Zip, "ZIP");
+                            });
+                        if ui.add_enabled(pipelines::can_append(&self.pipeline_draft_steps,
+                            self.pipeline_draft_action), egui::Button::new("Add step")).clicked() {
+                            self.pipeline_draft_steps.push(self.pipeline_draft_action);
+                        }
+                        if ui.add_enabled(!self.pipeline_draft_steps.is_empty(),
+                            egui::Button::new("Remove last")).clicked() {
+                            self.pipeline_draft_steps.pop();
+                        }
+                    });
+                    if !self.pipeline_draft_steps.is_empty() {
+                        let draft = pipelines::Pipeline { name: self.pipeline_draft_name.clone(),
+                            steps: self.pipeline_draft_steps.clone() };
+                        label(ui, &format!("Steps: {}", draft.summary()), 12.0, TEXT);
+                    }
+                    if ui.button("Save pipeline").clicked() {
+                        let pipeline = pipelines::Pipeline {
+                            name: self.pipeline_draft_name.trim().into(),
+                            steps: self.pipeline_draft_steps.clone(),
+                        };
+                        match pipeline.validate() {
+                            Err(error) => self.notify(error),
+                            Ok(()) => {
+                                if let Some(existing) = self.pipelines.iter_mut().find(|item|
+                                    item.name.eq_ignore_ascii_case(&pipeline.name)) {
+                                    *existing = pipeline.clone();
+                                } else if self.pipelines.len() < 20 {
+                                    self.pipelines.push(pipeline.clone());
+                                } else {
+                                    self.notify("Remove a pipeline before saving another");
+                                    return;
+                                }
+                                self.pipeline_draft_name.clear();
+                                self.pipeline_draft_steps.clear();
+                                self.save_data();
+                                self.notify(format!("Saved pipeline: {}", pipeline.name));
+                            }
+                        }
+                    }
+                    if ui.button("Import pipeline…").clicked() {
+                        #[cfg(target_os = "macos")]
+                        {
+                            let mut buffer = vec![0_u8; 8192];
+                            let length = unsafe { bookland_choose_pocket_file(
+                                buffer.as_mut_ptr().cast(), buffer.len()) };
+                            if length > 0 {
+                                self.install_pipeline(&PathBuf::from(
+                                    String::from_utf8_lossy(&buffer[..length]).to_string()));
+                            }
+                        }
+                    }
+                });
+                for pipeline in self.pipelines.clone() {
+                    ui.add_space(5.0);
+                    card().show(ui, |ui| {
+                        label(ui, &pipeline.name, 14.0, TEXT);
+                        label(ui, &pipeline.summary(), 11.0, MUTED);
+                        ui.horizontal(|ui| {
+                            if ui.button("Export").clicked() {
+                                if let Some(root) = preferences_path().and_then(|path| path.parent()
+                                    .map(|parent| parent.join("Pocket"))) {
+                                    match pipelines::export(&pipeline, &root) {
+                                        Ok(path) => {
+                                            let _ = Command::new("open").arg("-R").arg(&path).spawn();
+                                            self.notify(format!("Exported {}", path.display()));
+                                        }
+                                        Err(error) => self.notify(format!("Export failed: {error}")),
+                                    }
+                                }
+                            }
+                            if ui.button("Remove").clicked() {
+                                self.pipelines.retain(|item| item.name != pipeline.name);
+                                self.save_data();
+                                self.notify(format!("Removed pipeline: {}", pipeline.name));
+                            }
+                        });
+                    });
+                }
             }
             "Live Activities" => {
                 card().show(ui, |ui| {

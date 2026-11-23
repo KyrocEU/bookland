@@ -1,6 +1,8 @@
 use std::{fs, io::Read, path::{Path, PathBuf}, process::Command};
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Action { Keep, Png, Jpeg, Heic, Tiff, Webp, Aiff, Alac, Flac, Docx, Html, Zip }
 
 pub fn is_kept(source: &Path, root: &Path) -> bool {
