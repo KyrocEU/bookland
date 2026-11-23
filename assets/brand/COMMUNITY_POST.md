@@ -1,6 +1,6 @@
 # Bookland community feedback draft
 
-I’m building **Bookland**, an open-source macOS island that sits around the camera notch. Hover over it and a Liquid Glass panel opens for music, useful Mac tools, and live coding-agent activity. The app is written mostly in Rust, with AppKit for native glass, a display-synced opening animation, and a Core Animation layer for the closed activity ring. The interface is in English and supports right-to-left music titles.
+I’m building **Bookland**, an open-source macOS island that sits around the camera notch. Hover over it and a Liquid Glass panel opens for music, useful Mac tools, and live coding-agent activity. The app is written mostly in Rust, with AppKit for native glass and Core Animation layers for the moving silhouette and closed activity ring. The interface is in English and supports right-to-left music titles.
 
 The current build has a working hover island; system media playback, seeking, and skip controls; artwork and optional synced lyrics; CPU, RAM, GPU, battery, and disk widgets; a floating file Pocket; clipboard history; downloads; Calendar; notes; a prompt builder and prompter; and a Codex activity view. For Codex turns started through Bookland, approvals and questions open directly in the island and wait for my decision. Bookland uses an original logo and is independent of NotchNook and OpenAI.
 

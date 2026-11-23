@@ -65,6 +65,8 @@ unsafe extern "C" {
         slot: i32, x: f64, y: f64, width: f64, height: f64,
         radius: f64, level: f64, opacity: f64, enabled: i32,
     );
+    fn nooklet_morph_shell_set(enabled: i32, x: f64, y: f64, width: f64,
+        height: f64, top_radius: f64, bottom_radius: f64, opacity: f64);
     fn nooklet_calendar_status() -> i32;
     fn nooklet_calendar_connect();
     fn nooklet_calendar_refresh();
@@ -569,6 +571,7 @@ struct DeskApp {
     opened_by_hover: bool,
     hover_blocked_until_exit: bool,
     native_ring_center: Option<egui::Pos2>,
+    native_morph_shell: Option<(egui::Rect, f32, f32, f32)>,
     island_gesture: IslandGesture,
     last_haptic_expanded: bool,
     battery: String,
@@ -1968,6 +1971,7 @@ impl DeskApp {
             opened_by_hover: false,
             hover_blocked_until_exit: false,
             native_ring_center: None,
+            native_morph_shell: None,
             island_gesture: IslandGesture::default(),
             last_haptic_expanded: expanded,
             battery: battery_status(),
@@ -2199,6 +2203,13 @@ impl DeskApp {
                         nooklet_set_glass(slot as i32, 0.0, 0.0, 0.0, 0.0,
                             0.0, 0.0, 0.0, 0);
                     }
+                }
+                if let Some((rect, top, bottom, opacity)) = self.native_morph_shell {
+                    nooklet_morph_shell_set(1, rect.min.x as f64, rect.min.y as f64,
+                        rect.width() as f64, rect.height() as f64,
+                        top as f64, bottom as f64, opacity as f64);
+                } else {
+                    nooklet_morph_shell_set(0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
                 }
             }
         }
@@ -4996,6 +5007,18 @@ impl DeskApp {
                                     ui.painter().add(egui::Shape::line(points,
                                         Stroke::new(1.5, tint)));
                                 }
+                                if self.prefs.pulse_explain {
+                                    let explanation = match name.as_str() {
+                                        "RAM" | "Memory" => "System-wide physical memory used, including macOS compression. The orange line shows recent readings; it is not Bookland's memory use or a memory-pressure warning.",
+                                        "CPU" => "System-wide CPU activity. The green line shows recent readings.",
+                                        "GPU" => "System-wide GPU activity when this Mac reports it.",
+                                        "Battery" => "Current Mac battery charge.",
+                                        "Disk" => "Current disk use.",
+                                        _ => "Current system reading.",
+                                    };
+                                    ui.interact(rect, ui.make_persistent_id(("nook-pulse", index)),
+                                        egui::Sense::hover()).on_hover_text(explanation);
+                                }
                                 self.glass_rects[2 + index] = Some(rect);
                             }
                         }
@@ -6524,7 +6547,12 @@ impl DeskApp {
         } else { 0.0 };
         let shell = Color32::from_rgba_unmultiplied(0, 0, 0,
             ((1.0 - reveal) * 255.0).round() as u8);
-        ui.painter().rect_filled(rect, corners, shell);
+        if self.native_installed && !self.preview_mode && self.screenshot.is_none() {
+            self.native_morph_shell = Some((rect, top_radius as f32,
+                radius as f32, 1.0 - reveal));
+        } else {
+            ui.painter().rect_filled(rect, corners, shell);
+        }
         self.glass_rects[0] = Some(rect);
         // Bring the actual workspace in before the shell finishes expanding.
         // Clip it to the moving outline so text and controls do not pop in on
@@ -7533,6 +7561,7 @@ impl eframe::App for DeskApp {
         self.glass_rects = [None; 8];
         self.open_notch_rect = None;
         self.native_ring_center = None;
+        self.native_morph_shell = None;
         let now = Instant::now();
         let (dragging_file, pointer_x) = ctx.input(|input|
             (!input.raw.hovered_files.is_empty(), input.pointer.hover_pos().map(|pos| pos.x)));

@@ -7,6 +7,8 @@ static NSGlassEffectView *nookletGlass[8];
 static NSView *nookletContainer;
 static NSWindow *nookletHostWindow;
 static NSWindow *nookletGlassWindow;
+static NSView *nookletMorphView;
+static CAShapeLayer *nookletMorphLayer;
 static NSWindow *nookletProgressWindow;
 static CAShapeLayer *nookletProgressTrack;
 static CAShapeLayer *nookletProgressArc;
@@ -235,6 +237,18 @@ int nooklet_install_glass(void *rawView) {
     // Prepare the island and its floating menu/card glass before the first
     // hover. Hidden views do not render; this keeps allocation off the morph.
     for (int slot = 0; slot <= 5; slot++) nookletPrepareGlassView(slot);
+    // Keep the moving black silhouette in a native Core Animation layer.
+    // Only this path is visible during the morph; the final workspace stays
+    // in the existing adaptive glass view.
+    nookletMorphView = [[NSView alloc] initWithFrame:container.bounds];
+    nookletMorphView.wantsLayer = YES;
+    nookletMorphView.layer.backgroundColor = NSColor.clearColor.CGColor;
+    nookletMorphView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    nookletMorphView.hidden = YES;
+    nookletMorphLayer = [CAShapeLayer layer];
+    nookletMorphLayer.fillColor = NSColor.blackColor.CGColor;
+    [nookletMorphView.layer addSublayer:nookletMorphLayer];
+    [container addSubview:nookletMorphView positioned:NSWindowAbove relativeTo:nil];
     if (!booklandScrollMonitor) {
         // NotchNook's local scroll monitor ignores momentum events. Keeping
         // those out of the gesture accumulator avoids a second media action
@@ -292,6 +306,42 @@ void nooklet_set_glass(int slot, double x, double y, double width, double height
     view.alphaValue = fmax(0.0, fmin(1.0, opacity));
     view.hidden = NO;
     [CATransaction commit];
+}
+
+void nooklet_morph_shell_set(int enabled, double x, double y, double width,
+                            double height, double topRadius, double bottomRadius,
+                            double opacity) {
+    if (!nookletMorphView || !nookletMorphLayer) return;
+    if (!enabled || width <= 0 || height <= 0 || opacity <= 0) {
+        nookletMorphView.hidden = YES;
+        return;
+    }
+    if (!NSEqualRects(nookletGlassWindow.frame, nookletHostWindow.frame)) {
+        [nookletGlassWindow setFrame:nookletHostWindow.frame display:NO];
+    }
+    CGFloat w = width, h = height;
+    CGFloat top = fmax(0, fmin(topRadius, fmin(w, h) * 0.5));
+    CGFloat bottom = fmax(0, fmin(bottomRadius, fmin(w, h) * 0.5));
+    CGMutablePathRef path = CGPathCreateMutable();
+    CGPathMoveToPoint(path, NULL, top, h);
+    CGPathAddLineToPoint(path, NULL, w - top, h);
+    CGPathAddQuadCurveToPoint(path, NULL, w, h, w, h - top);
+    CGPathAddLineToPoint(path, NULL, w, bottom);
+    CGPathAddQuadCurveToPoint(path, NULL, w, 0, w - bottom, 0);
+    CGPathAddLineToPoint(path, NULL, bottom, 0);
+    CGPathAddQuadCurveToPoint(path, NULL, 0, 0, 0, bottom);
+    CGPathAddLineToPoint(path, NULL, 0, h - top);
+    CGPathAddQuadCurveToPoint(path, NULL, 0, h, top, h);
+    CGPathCloseSubpath(path);
+    CGFloat flippedY = nookletMorphView.bounds.size.height - y - h;
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    nookletMorphLayer.frame = CGRectMake(x, flippedY, w, h);
+    nookletMorphLayer.path = path;
+    nookletMorphLayer.opacity = fmax(0, fmin(1, opacity));
+    nookletMorphView.hidden = NO;
+    [CATransaction commit];
+    CGPathRelease(path);
 }
 
 void nooklet_progress_ring_set(int enabled, double x, double y) {
