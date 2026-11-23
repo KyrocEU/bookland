@@ -14,7 +14,7 @@
   <key>CFBundleVersion</key><string>1</string>
   <key>LSMinimumSystemVersion</key><string>26.0</string>
   <key>LSUIElement</key><true/>
-  <key>NSAppleEventsUsageDescription</key><string>Bookland controls playback in Apple Music or Spotify and saves a note to Apple Notes when you request those actions.</string>
+  <key>NSAppleEventsUsageDescription</key><string>Bookland controls Apple Music or Spotify playback, reads the current Apple Music playlist when you open Playing Next, and saves a note to Apple Notes when requested.</string>
   <key>NSCalendarsFullAccessUsageDescription</key><string>Bookland shows and creates calendar events when you connect Calendar.</string>
   <key>NSMicrophoneUsageDescription</key><string>Bookland listens to your speech only while Voice Prompter is running so it can follow your script.</string>
   <key>NSCameraUsageDescription</key><string>Bookland uses the camera only while you open the Mirror widget.</string>

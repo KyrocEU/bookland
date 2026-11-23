@@ -22,6 +22,7 @@ mod lyrics;
 mod media_remote_adapter;
 mod music_airplay;
 use music_airplay::AirPlayDevice;
+mod music_queue;
 mod pocket;
 mod shake;
 mod prompter;
@@ -752,6 +753,10 @@ struct DeskApp {
     airplay_devices: Vec<AirPlayDevice>,
     airplay_rx: Option<std::sync::mpsc::Receiver<Result<Vec<AirPlayDevice>, String>>>,
     airplay_status: String,
+    queue_open: bool,
+    queue_for: Option<(String, String)>,
+    queue_rx: Option<std::sync::mpsc::Receiver<music_queue::Preview>>,
+    queue_preview: music_queue::Preview,
     mirror_open: bool,
     mirror_error: String,
     mirror_texture: Option<egui::TextureHandle>,
@@ -2016,6 +2021,9 @@ impl DeskApp {
                 let outputs = self.airplay_devices.iter()
                     .filter(|device| device.supports_audio).count().min(4);
                 return (585.0, if self.airplay_open { 330.0 + outputs as f32 * 28.0 }
+                    else if self.queue_open { if self.media_app.as_deref() == Some("Music") {
+                        430.0
+                    } else { 315.0 } }
                     else if self.lyrics_open { 385.0 } else { 315.0 });
             }
             if self.workspace != Workspace::Nook {
@@ -2245,6 +2253,10 @@ impl DeskApp {
             airplay_devices: Vec::new(),
             airplay_rx: None,
             airplay_status: String::new(),
+            queue_open: false,
+            queue_for: None,
+            queue_rx: None,
+            queue_preview: music_queue::Preview { tracks: Vec::new(), status: String::new() },
             mirror_open: false,
             mirror_error: String::new(),
             mirror_texture: None,
@@ -3176,6 +3188,41 @@ impl DeskApp {
             self.lyrics_lines.clear();
             self.lyrics_status.clear();
             self.lyrics_open = false;
+        }
+        if self.queue_open && self.media_app.as_deref() == Some("Music")
+            && self.media_title != "Nothing playing" {
+            if let Some(result) = self.queue_rx.as_ref().map(|rx| rx.try_recv()) {
+                match result {
+                    Ok(preview) => {
+                        self.queue_rx = None;
+                        self.queue_preview = preview;
+                    }
+                    Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                        self.queue_rx = None;
+                        self.queue_preview = music_queue::Preview {
+                            tracks: Vec::new(),
+                            status: "Apple Music playlist read ended unexpectedly.".into(),
+                        };
+                    }
+                    Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                }
+            }
+            let key = (self.media_title.clone(), self.media_artist.clone());
+            if self.queue_for.as_ref() != Some(&key) {
+                self.queue_for = Some(key);
+                self.queue_preview = music_queue::Preview {
+                    tracks: Vec::new(), status: "Reading Apple Music playlist…".into(),
+                };
+                let (tx, rx) = std::sync::mpsc::channel();
+                self.queue_rx = Some(rx);
+                std::thread::spawn(move || { let _ = tx.send(music_queue::read()); });
+            }
+        } else if self.queue_for.is_some() || self.queue_rx.is_some() {
+            self.queue_for = None;
+            self.queue_rx = None;
+            self.queue_preview = music_queue::Preview {
+                tracks: Vec::new(), status: String::new(),
+            };
         }
         if let Some(end) = self.timer_end {
             if Instant::now() >= end {
@@ -4140,6 +4187,27 @@ impl DeskApp {
             }
         }
     }
+    fn playing_next_preview(&self, ui: &mut egui::Ui, compact: bool) {
+        if compact { label(ui, "PLAYING NEXT", 10.0, MUTED); }
+        let status = if self.media_app.as_deref() != Some("Music") {
+            "Playlist preview is available for Apple Music."
+        } else if self.media_title == "Nothing playing" {
+            "Play a song in Apple Music to see the playlist order."
+        } else { &self.queue_preview.status };
+        if !status.is_empty() { label(ui, status, if compact { 10.0 } else { 11.0 }, MUTED); }
+        for (index, track) in self.queue_preview.tracks.iter().enumerate() {
+            ui.horizontal(|ui| {
+                label(ui, &format!("{:02}", index + 1), 11.0, ACCENT);
+                ui.vertical(|ui| {
+                    music_text(ui, &track.title, if compact { 12.0 } else { 13.0 },
+                        TEXT, true, true);
+                    if !track.artist.is_empty() {
+                        music_text(ui, &track.artist, 10.0, MUTED, false, true);
+                    }
+                });
+            });
+        }
+    }
     fn music(&mut self, ui: &mut egui::Ui) {
         card().show(ui, |ui| {
             ui.vertical_centered(|ui| {
@@ -4154,6 +4222,8 @@ impl DeskApp {
                         .on_hover_text("Show synced lyrics").clicked() {
                     self.lyrics_open = !self.lyrics_open;
                     if self.lyrics_open {
+                        self.queue_open = false;
+                        self.airplay_open = false;
                         self.last_media_poll = Instant::now() - Duration::from_secs(6);
                     }
                 } else if self.lyrics_for.is_some() && !self.lyrics_status.is_empty() {
@@ -4189,7 +4259,11 @@ impl DeskApp {
                 section_title(ui, "APPLE MUSIC AIRPLAY");
                 if small_button(ui, if self.airplay_open { "Hide" } else { "Choose output" }).clicked() {
                     self.airplay_open = !self.airplay_open;
-                    if self.airplay_open { self.refresh_music_airplay(); }
+                    if self.airplay_open {
+                        self.queue_open = false;
+                        self.lyrics_open = false;
+                        self.refresh_music_airplay();
+                    }
                 }
             });
             if self.airplay_open {
@@ -4206,6 +4280,21 @@ impl DeskApp {
                     if response.changed() { self.select_music_airplay(device.name, selected); }
                     if !device.available { label(ui, "Unavailable", 11.0, MUTED); }
                 }
+            }
+        });
+        ui.add_space(12.0);
+        card().show(ui, |ui| {
+            if small_button(ui, if self.queue_open { "Hide Playing Next" }
+                else { "Playing Next" }).clicked() {
+                self.queue_open = !self.queue_open;
+                if self.queue_open {
+                    self.lyrics_open = false;
+                    self.airplay_open = false;
+                }
+            }
+            if self.queue_open {
+                ui.add_space(7.0);
+                self.playing_next_preview(ui, false);
             }
         });
         if self.lyrics_open && !self.lyrics_lines.is_empty() {
@@ -5558,12 +5647,20 @@ impl DeskApp {
                         .on_hover_text("Show synced lyrics").clicked() {
                         self.lyrics_open = !self.lyrics_open;
                         self.airplay_open = false;
+                        self.queue_open = false;
                     }
                     if small_button(ui, if self.airplay_open { "Hide outputs" } else { "AirPlay" })
                         .clicked() {
                         self.airplay_open = !self.airplay_open;
                         self.lyrics_open = false;
+                        self.queue_open = false;
                         if self.airplay_open { self.refresh_music_airplay(); }
+                    }
+                    if small_button(ui, if self.queue_open { "Hide next" } else { "Playing Next" })
+                        .clicked() {
+                        self.queue_open = !self.queue_open;
+                        self.airplay_open = false;
+                        self.lyrics_open = false;
                     }
                     ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                         let old = self.volume;
@@ -5588,6 +5685,8 @@ impl DeskApp {
                             if response.changed() { self.select_music_airplay(device.name, selected); }
                         }
                     });
+                } else if self.queue_open {
+                    self.playing_next_preview(ui, true);
                 } else if self.lyrics_open && !self.lyrics_lines.is_empty() {
                     let position = self.media_position
                         + if self.media_playing { self.last_media_poll.elapsed().as_secs_f32() }
