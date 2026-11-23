@@ -561,7 +561,6 @@ struct DeskApp {
     last_frame: Instant,
     last_hovered: Instant,
     hover_opened_at: Instant,
-    hover_started: Option<Instant>,
     opened_by_hover: bool,
     hover_blocked_until_exit: bool,
     native_ring_center: Option<egui::Pos2>,
@@ -1931,7 +1930,6 @@ impl DeskApp {
             last_frame: now,
             last_hovered: now,
             hover_opened_at: now,
-            hover_started: None,
             opened_by_hover: false,
             hover_blocked_until_exit: false,
             native_ring_center: None,
@@ -6369,7 +6367,6 @@ impl DeskApp {
                 self.expanded = true;
                 self.opened_by_hover = true;
                 self.hover_blocked_until_exit = false;
-                self.hover_started = None;
                 self.last_hovered = Instant::now();
                 self.hover_opened_at = self.last_hovered;
                 ui.close();
@@ -6413,7 +6410,6 @@ impl DeskApp {
             self.expanded = true;
             self.opened_by_hover = !completion_clicked;
             self.hover_blocked_until_exit = false;
-            self.hover_started = None;
             self.last_hovered = Instant::now();
             self.hover_opened_at = self.last_hovered;
         } else if self.prefs.open_on_hover && hover_allowed
@@ -6421,26 +6417,18 @@ impl DeskApp {
             && !response.context_menu_opened() && !response.secondary_clicked()
             && ui.ctx().input(|input| !input.pointer.any_down())
         {
-            let since = self.hover_started.get_or_insert_with(Instant::now);
-            if since.elapsed() >= Duration::from_millis(120) {
-                if let Some(done) = self.agent_completion.take() {
-                    self.workspace = Workspace::Agents;
-                    self.agent_chat_open = false;
-                    self.agent_usage_view = false;
-                    self.selected_agent = self.agents.iter()
-                        .position(|agent| agent.path == done.path && agent.source == done.source)
-                        .unwrap_or(0);
-                } else { self.choose_hover_workspace(); }
-                self.expanded = true;
-                self.opened_by_hover = true;
-                self.last_hovered = Instant::now();
-                self.hover_opened_at = self.last_hovered;
-                self.hover_started = None;
-            } else {
-                ui.ctx().request_repaint_after(Duration::from_millis(120) - since.elapsed());
-            }
-        } else {
-            self.hover_started = None;
+            if let Some(done) = self.agent_completion.take() {
+                self.workspace = Workspace::Agents;
+                self.agent_chat_open = false;
+                self.agent_usage_view = false;
+                self.selected_agent = self.agents.iter()
+                    .position(|agent| agent.path == done.path && agent.source == done.source)
+                    .unwrap_or(0);
+            } else { self.choose_hover_workspace(); }
+            self.expanded = true;
+            self.opened_by_hover = true;
+            self.last_hovered = Instant::now();
+            self.hover_opened_at = self.last_hovered;
         }
     }
     fn morphing_notch(&mut self, ui: &mut egui::Ui) {
@@ -7479,8 +7467,10 @@ impl eframe::App for DeskApp {
         }
         let target_changed = self.expanded != self.animation_target_expanded;
         self.animation_target_expanded = self.expanded;
-        let dt = if target_changed { 0.0 }
-            else { now.duration_since(self.last_frame).as_secs_f32().min(1.0) };
+        // Start moving on the first frame after a hover event. Zeroing this
+        // frame added a full display interval to the apparent hover latency.
+        let elapsed = now.duration_since(self.last_frame).as_secs_f32().min(1.0);
+        let dt = if target_changed { elapsed.max(1.0 / 120.0) } else { elapsed };
         self.last_frame = now;
         let expanded_before_panel = self.expanded;
         let target = if self.expanded { 1.0 } else { 0.0 };
@@ -7509,7 +7499,9 @@ impl eframe::App for DeskApp {
         if self.screenshot.is_some() || target_changed {
             ctx.request_repaint();
         } else if self.transition != target {
-            ctx.request_repaint_after(Duration::from_millis(16));
+            // Wake ahead of the next 60 Hz vblank. A 16 ms timer can miss it
+            // and make the short morph appear to run at roughly 30 fps.
+            ctx.request_repaint_after(Duration::from_millis(8));
         } else {
             ctx.request_repaint_after(Duration::from_millis(if self.expanded { 100 }
                 else if self.prefs.open_on_hover { 350 } else { 500 }));

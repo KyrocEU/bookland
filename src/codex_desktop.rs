@@ -48,7 +48,7 @@ pub enum Decision { AllowOnce, Deny, Answer(Vec<(String, String)>) }
 
 fn is_approval_request(method: &str) -> bool {
     matches!(method, "item/commandExecution/requestApproval" |
-        "item/fileChange/requestApproval")
+        "item/fileChange/requestApproval" | "item/permissions/requestApproval")
 }
 
 fn is_user_input_request(method: &str) -> bool {
@@ -98,18 +98,33 @@ fn approval_display(value: &Value) -> Approval {
     let reason = params["reason"].as_str().unwrap_or("");
     let root = params["grantRoot"].as_str().unwrap_or("");
     let cwd = params["cwd"].as_str().unwrap_or("");
-    let title = if value["method"] == "item/fileChange/requestApproval" {
-        "Codex requests a file change".to_owned()
-    } else { "Codex requests a command".to_owned() };
+    let title = match value["method"].as_str() {
+        Some("item/fileChange/requestApproval") => "Codex requests a file change",
+        Some("item/permissions/requestApproval") => "Codex requests extra access",
+        _ => "Codex requests a command",
+    }.to_owned();
+    let requested = if value["method"] == "item/permissions/requestApproval" {
+        Some(format!("Requested permissions: {}", params["permissions"]))
+    } else { None };
     let detail = [reason, command, root, cwd].into_iter().filter(|part| !part.is_empty())
-        .collect::<Vec<_>>().join(" · ");
+        .map(str::to_owned).chain(requested).collect::<Vec<_>>().join(" · ");
     Approval { title, detail }
 }
 
-fn answer_approval(stdin: &mut impl Write, id: &Value, decision: Decision)
+fn answer_approval(stdin: &mut impl Write, request: &Value, decision: Decision)
     -> Result<(), String> {
-    let reply = json!({"id": id, "result": {"decision": match decision {
-        Decision::AllowOnce => "accept", Decision::Deny | Decision::Answer(_) => "decline" }}});
+    let reply = if request["method"] == "item/permissions/requestApproval" {
+        let requested = &request["params"]["permissions"];
+        let permissions = if matches!(decision, Decision::AllowOnce) && requested.is_object() {
+            requested.clone()
+        } else { json!({}) };
+        json!({"id": request["id"], "result": {"permissions": permissions,
+            "scope": "turn"}})
+    } else {
+        json!({"id": request["id"], "result": {"decision": match decision {
+            Decision::AllowOnce => "accept",
+            Decision::Deny | Decision::Answer(_) => "decline" }}})
+    };
     serde_json::to_writer(&mut *stdin, &reply).map_err(|error| error.to_string())?;
     stdin.write_all(b"\n").and_then(|_| stdin.flush())
         .map_err(|error| error.to_string())
@@ -443,10 +458,10 @@ fn execute(thread_id: String, prompt: String, allow_edits: bool,
                         if allow_edits {
                             let _ = sender.send(Event::Approval(approval_display(&value)));
                             let decision = decisions.recv().unwrap_or(Decision::Deny);
-                            answer_approval(&mut stdin, id, decision)?;
+                            answer_approval(&mut stdin, &value, decision)?;
                             let _ = sender.send(Event::Progress("Waiting for Codex…".into()));
                         } else {
-                            answer_approval(&mut stdin, id, Decision::Deny)?;
+                            answer_approval(&mut stdin, &value, Decision::Deny)?;
                         }
                         continue;
                     }
@@ -523,10 +538,31 @@ mod tests {
         assert_eq!(display.title, "Codex requests a command");
         assert!(display.detail.contains("printf test"));
         let mut output = Vec::new();
-        answer_approval(&mut output, &request["id"], Decision::AllowOnce).unwrap();
+        answer_approval(&mut output, &request, Decision::AllowOnce).unwrap();
         let answer: serde_json::Value = serde_json::from_slice(&output).unwrap();
         assert_eq!(answer["id"], "approval-7");
         assert_eq!(answer["result"]["decision"], "accept");
+    }
+
+    #[test]
+    fn permission_approval_grants_only_the_requested_profile_for_this_turn() {
+        let request = json!({"method": "item/permissions/requestApproval",
+            "id": 23, "params": {"reason": "Read an external folder",
+                "permissions": {"fileSystem": {"read": ["/tmp/bookland-probe"]},
+                    "network": {"enabled": true}}}});
+        let display = approval_display(&request);
+        assert_eq!(display.title, "Codex requests extra access");
+        assert!(display.detail.contains("/tmp/bookland-probe"));
+        let mut output = Vec::new();
+        answer_approval(&mut output, &request, Decision::AllowOnce).unwrap();
+        let answer: serde_json::Value = serde_json::from_slice(&output).unwrap();
+        assert_eq!(answer["id"], 23);
+        assert_eq!(answer["result"]["permissions"], request["params"]["permissions"]);
+        assert_eq!(answer["result"]["scope"], "turn");
+        output.clear();
+        answer_approval(&mut output, &request, Decision::Deny).unwrap();
+        let denied: serde_json::Value = serde_json::from_slice(&output).unwrap();
+        assert_eq!(denied["result"]["permissions"], json!({}));
     }
 
     #[test]
