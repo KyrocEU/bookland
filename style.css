@@ -54,7 +54,7 @@ h1 span, h2 span { color: #afc9eb; }
 .button.secondary { border: 1px solid rgba(213,233,255,.24); background: rgba(227,242,255,.06); }
 .button.secondary:hover { background: rgba(227,242,255,.12); }
 .hero-note { margin-top: 1.2rem; color: #8499b2; font-size: .86rem; }
-.hero-product { position: relative; width: 100%; margin: 65px 0 0; padding: 11px; border: 1px solid rgba(179,213,255,.22); border-radius: 31px; background: linear-gradient(145deg, rgba(192,227,255,.14), rgba(66,113,174,.04) 35%, rgba(178,215,255,.09)); box-shadow: 0 38px 100px rgba(0,0,0,.46), 0 0 95px rgba(58,119,202,.12), inset 0 1px rgba(244,251,255,.15); text-align: left; }
+.hero-product { position: relative; width: 100%; margin: 65px 0 0; padding: 11px; overflow: clip; border: 1px solid rgba(179,213,255,.22); border-radius: 31px; background: linear-gradient(145deg, rgba(192,227,255,.14), rgba(66,113,174,.04) 35%, rgba(178,215,255,.09)); box-shadow: 0 38px 100px rgba(0,0,0,.46), 0 0 95px rgba(58,119,202,.12), inset 0 1px rgba(244,251,255,.15); text-align: left; }
 .hero-product-topline { display: flex; justify-content: space-between; gap: 16px; padding: 10px 19px 16px; color: #a8c8ed; font-size: .72rem; font-weight: 690; letter-spacing: .15em; }
 .hero-product-topline span:first-child { display: inline-flex; align-items: center; gap: 9px; }
 .hero-product-topline i { width: 7px; height: 7px; border-radius: 50%; background: #75c5f7; box-shadow: 0 0 12px rgba(117,197,247,.65); }
@@ -247,6 +247,7 @@ h2 { font-size: clamp(2.8rem, 5vw, 4.8rem); line-height: 1.08; font-weight: 700;
   .hero-actions { align-items: stretch; }
   .hero-actions .button { flex: 1 1 auto; }
   .hero { padding-top: 126px; }
+  .hero::before { width: 100vw; }
   .hero-product { margin-top: 43px; padding: 6px; border-radius: 20px; }
   .hero-product-topline { padding: 9px 10px 12px; font-size: .6rem; }
   .hero-product-topline span:last-child { display: none; }
@@ -268,6 +269,7 @@ h2 { font-size: clamp(2.8rem, 5vw, 4.8rem); line-height: 1.08; font-weight: 700;
   .nook-focus strong { font-size: 1.3rem; }
   .focus-ticks, .focus-start { display: none; }
   .music-art { flex-basis: 84px; height: 84px; }
+  .music-detail { flex: 1 1 0; min-width: 0; }
   .music-orb { width: 56px; height: 56px; }
   .music-detail strong, .calendar-copy strong, .tray-copy strong, .agents-copy strong { font-size: 1.05rem; }
   .music-detail p, .calendar-copy p, .tray-copy p, .agents-copy p { font-size: .75rem; }
