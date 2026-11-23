@@ -6909,7 +6909,7 @@ impl DeskApp {
                     ui.add_space(4.0);
                     let status: String = self.codex_status.chars().take(140).collect();
                     ui.add(egui::Label::new(RichText::new(status).size(11.0)
-                        .color(Color32::from_rgb(36, 40, 48)))
+                        .color(MUTED))
                         .wrap());
                 }
                 ui.add_space(7.0);
@@ -6967,7 +6967,7 @@ impl DeskApp {
                     }
                     ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                         label(ui, "⌘ Return to send", 10.0,
-                            Color32::from_rgb(36, 40, 48));
+                            MUTED);
                     });
                 });
             });
@@ -7178,7 +7178,7 @@ impl DeskApp {
                         ui.add_enabled(self.desktop_codex_rx.is_none(),
                             egui::Checkbox::new(&mut self.desktop_codex_allow_edits,
                                 RichText::new("Allow edits")
-                                    .color(Color32::from_rgb(36, 40, 48))))
+                                    .color(MUTED)))
                             .on_hover_text("This lets Codex edit its selected workspace. Other actions ask here first.");
                     });
                 });
