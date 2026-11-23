@@ -92,6 +92,8 @@ function startScrollMotion() {
   ].map(([selector, name]) => ({ node: document.querySelector(selector), name }));
   let chapterStarts = [];
   let activeChapter = -1;
+  let chapterHideTimer;
+  const compactChapter = window.matchMedia('(max-width: 800px)');
   function measureChapters() {
     chapterStarts = chapters.map(({ node }) => node.getBoundingClientRect().top + window.scrollY);
     scheduleProgress();
@@ -111,8 +113,17 @@ function startScrollMotion() {
       activeChapter = nextChapter;
       chapterCount.textContent = `${String(nextChapter + 1).padStart(2, '0')} / 08`;
       chapterName.textContent = chapters[nextChapter].name;
+      if (compactChapter.matches && window.scrollY > 280 && fraction < .98) {
+        chapter.classList.add('is-visible');
+        window.clearTimeout(chapterHideTimer);
+        chapterHideTimer = window.setTimeout(() => {
+          chapter.classList.remove('is-visible');
+        }, 1700);
+      }
     }
-    chapter.classList.toggle('is-visible', window.scrollY > 280 && fraction < .98);
+    if (!compactChapter.matches) {
+      chapter.classList.toggle('is-visible', window.scrollY > 280 && fraction < .98);
+    }
     scheduled = false;
   }
   function scheduleProgress() {
@@ -130,6 +141,7 @@ function startScrollMotion() {
     window.removeEventListener('scroll', scheduleProgress);
     window.removeEventListener('resize', measureChapters);
     window.removeEventListener('load', measureChapters);
+    window.clearTimeout(chapterHideTimer);
     document.documentElement.classList.remove('motion-enabled');
     chapter.classList.remove('is-visible');
     revealNodes.forEach((node) => node.classList.remove('scroll-reveal', 'is-visible'));
