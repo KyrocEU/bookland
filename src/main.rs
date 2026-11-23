@@ -2669,7 +2669,8 @@ impl DeskApp {
         self.pocket_status = match action {
             pocket::Action::Keep => "Keeping a copy…",
             pocket::Action::Png | pocket::Action::Jpeg |
-            pocket::Action::Heic | pocket::Action::Tiff => "Converting image…",
+            pocket::Action::Heic | pocket::Action::Tiff |
+            pocket::Action::Webp => "Converting image…",
             pocket::Action::Aiff | pocket::Action::Alac => "Converting audio…",
             pocket::Action::Zip => "Creating ZIP…",
         }.into();
@@ -2698,6 +2699,7 @@ impl DeskApp {
                         pocket::Action::Jpeg => "Converted to JPEG in Pocket",
                         pocket::Action::Heic => "Converted to HEIC in Pocket",
                         pocket::Action::Tiff => "Converted to TIFF in Pocket",
+                        pocket::Action::Webp => "Converted to WebP in Pocket",
                         pocket::Action::Aiff => "Converted to AIFF in Pocket",
                         pocket::Action::Alac => "Converted to ALAC in Pocket",
                         pocket::Action::Zip => "Created ZIP in Pocket",
@@ -4918,6 +4920,7 @@ impl DeskApp {
                                 ("JPEG", pocket::Action::Jpeg),
                                 ("HEIC", pocket::Action::Heic),
                                 ("TIFF", pocket::Action::Tiff),
+                                ("WebP (lossless)", pocket::Action::Webp),
                                 ("AIFF", pocket::Action::Aiff),
                                 ("ALAC (.m4a)", pocket::Action::Alac)] {
                                 if pocket::can_convert_to(&path, action) &&
@@ -4998,6 +5001,7 @@ impl DeskApp {
                                             ("JPEG", pocket::Action::Jpeg),
                                             ("HEIC", pocket::Action::Heic),
                                             ("TIFF", pocket::Action::Tiff),
+                                            ("WebP (lossless)", pocket::Action::Webp),
                                             ("AIFF", pocket::Action::Aiff),
                                             ("ALAC (.m4a)", pocket::Action::Alac)] {
                                             if pocket::can_convert_to(&path, action) &&

@@ -1,7 +1,7 @@
 use std::{fs, path::{Path, PathBuf}, process::Command};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Action { Keep, Png, Jpeg, Heic, Tiff, Aiff, Alac, Zip }
+pub enum Action { Keep, Png, Jpeg, Heic, Tiff, Webp, Aiff, Alac, Zip }
 
 pub fn is_kept(source: &Path, root: &Path) -> bool {
     source.parent().and_then(|parent| parent.canonicalize().ok())
@@ -25,12 +25,13 @@ pub fn can_convert_to(source: &Path, action: Action) -> bool {
     match action {
         Action::Aiff => source_is_audio && !matches!(extension.as_str(), "aif" | "aiff"),
         Action::Alac => source_is_audio,
-        Action::Png | Action::Jpeg | Action::Heic | Action::Tiff => {
+        Action::Png | Action::Jpeg | Action::Heic | Action::Tiff | Action::Webp => {
             !source_is_audio && !matches!((action, extension.as_str()),
                 (Action::Png, "png") |
                 (Action::Jpeg, "jpg" | "jpeg") |
                 (Action::Heic, "heic" | "heif") |
-                (Action::Tiff, "tif" | "tiff"))
+                (Action::Tiff, "tif" | "tiff") |
+                (Action::Webp, "webp"))
         }
         Action::Keep | Action::Zip => false,
     }
@@ -66,6 +67,36 @@ fn archive_destination(root: &Path, source: &Path) -> Result<PathBuf, String> {
     Err("Pocket has too many ZIPs with this name".into())
 }
 
+fn convert_to_webp(source: &Path, output: &Path) -> Result<(), String> {
+    use image::codecs::webp::WebPEncoder;
+    if !source.is_file() { return Err("Only image files can be converted".into()); }
+    // ImageIO reads HEIC, AVIF, and other macOS image formats that the small
+    // bundled Rust decoder set does not. Keep its intermediate outside Pocket.
+    let extension = source.extension().and_then(|value| value.to_str())
+        .unwrap_or_default().to_ascii_lowercase();
+    let temporary = if matches!(extension.as_str(), "png" | "jpg" | "jpeg") {
+        None
+    } else {
+        let directory = tempfile::tempdir().map_err(|error| error.to_string())?;
+        let decoded = directory.path().join("decoded.png");
+        let result = Command::new("/usr/bin/sips").args(["-s", "format", "png"])
+            .arg(source).arg("--out").arg(&decoded).output()
+            .map_err(|error| error.to_string())?;
+        if !result.status.success() || !decoded.is_file() {
+            let detail = String::from_utf8_lossy(&result.stderr);
+            return Err(detail.lines().rev().find(|line| !line.trim().is_empty())
+                .unwrap_or("macOS could not decode this image").chars().take(180).collect());
+        }
+        Some((directory, decoded))
+    };
+    let decoded = temporary.as_ref().map(|(_, path)| path.as_path()).unwrap_or(source);
+    let image = image::open(decoded).map_err(|error| error.to_string())?;
+    let rgba = image.to_rgba8();
+    let file = fs::File::create(output).map_err(|error| error.to_string())?;
+    WebPEncoder::new_lossless(file).encode(rgba.as_raw(), rgba.width(), rgba.height(),
+        image::ExtendedColorType::Rgba8).map_err(|error| error.to_string())
+}
+
 pub fn execute(action: Action, source: &Path, root: &Path) -> Result<PathBuf, String> {
     if !source.exists() { return Err("Source file is no longer available".into()); }
     fs::create_dir_all(root).map_err(|error| error.to_string())?;
@@ -78,11 +109,17 @@ pub fn execute(action: Action, source: &Path, root: &Path) -> Result<PathBuf, St
         let extension = match action {
             Action::Keep => None, Action::Png => Some("png"),
             Action::Jpeg => Some("jpg"), Action::Heic => Some("heic"),
-            Action::Tiff => Some("tiff"), Action::Aiff => Some("aiff"),
+            Action::Tiff => Some("tiff"), Action::Webp => Some("webp"),
+            Action::Aiff => Some("aiff"),
             Action::Alac => Some("m4a"), Action::Zip => unreachable!(),
         };
         destination(root, source, extension)?
     };
+    if action == Action::Webp {
+        let result = convert_to_webp(source, &output);
+        if result.is_err() { let _ = fs::remove_file(&output); }
+        return result.map(|()| output);
+    }
     let result = match action {
         Action::Keep => Command::new("/usr/bin/ditto").arg(source).arg(&output).output(),
         Action::Zip => {
@@ -115,6 +152,7 @@ pub fn execute(action: Action, source: &Path, root: &Path) -> Result<PathBuf, St
                 .args(["-f", file, "-d", data])
                 .arg(source).arg(&output).output()
         }
+        Action::Webp => unreachable!(),
     }.map_err(|error| error.to_string())?;
     if !result.status.success() || !output.exists() {
         let _ = fs::remove_file(&output);
@@ -170,6 +208,30 @@ mod tests {
             assert!(result.status.success());
             assert!(String::from_utf8_lossy(&result.stdout).contains(extension));
         }
+    }
+
+    #[test]
+    fn webp_conversion_preserves_alpha_and_decodes_heic() {
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("sample.png");
+        let pocket = temp.path().join("Pocket");
+        let mut pixels = image::RgbaImage::from_pixel(32, 32,
+            image::Rgba([10, 20, 30, 255]));
+        pixels.put_pixel(3, 4, image::Rgba([40, 50, 60, 75]));
+        pixels.save(&source).unwrap();
+        let first = execute(Action::Webp, &source, &pocket).unwrap();
+        let second = execute(Action::Webp, &source, &pocket).unwrap();
+        assert_ne!(first, second);
+        assert_eq!(&fs::read(&first).unwrap()[8..12], b"WEBP");
+        assert_eq!(image::open(&first).unwrap().to_rgba8().get_pixel(3, 4),
+            pixels.get_pixel(3, 4));
+        assert!(source.exists());
+        assert!(!can_convert_to(&first, Action::Webp));
+
+        let heic = execute(Action::Heic, &source, &pocket).unwrap();
+        let from_heic = execute(Action::Webp, &heic, &pocket).unwrap();
+        let decoded = image::open(from_heic).unwrap();
+        assert_eq!((decoded.width(), decoded.height()), (32, 32));
     }
 
     #[test]
