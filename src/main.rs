@@ -51,7 +51,8 @@ const ACCENT: Color32 = Color32::from_rgb(198, 217, 255);
 #[cfg(target_os = "macos")]
 unsafe extern "C" {
     fn nooklet_install_glass(view: *mut std::ffi::c_void) -> i32;
-    fn nooklet_anchor_host_to_screen_top(enabled: i32);
+    fn nooklet_anchor_host_to_screen_top(enabled: i32, display_id: u32);
+    fn nooklet_displays_copy(buffer: *mut std::ffi::c_char, capacity: usize) -> usize;
     fn nooklet_reduce_motion() -> i32;
     fn nooklet_physical_notch(width: *mut f64, height: *mut f64) -> i32;
     fn nooklet_progress_ring_set(enabled: i32, x: f64, y: f64, usage_style: i32);
@@ -534,6 +535,7 @@ struct Preferences {
     demo_mode: bool,
     media_source: String,
     calendar_id: String,
+    island_display_id: u32,
     style: String,
     glass_level: f32,
     animation_speed: f32,
@@ -607,6 +609,7 @@ impl Default for Preferences {
             demo_mode: false,
             media_source: "System".into(),
             calendar_id: String::new(),
+            island_display_id: 0,
             style: "Glass".into(),
             glass_level: 0.75,
             animation_speed: 1.0,
@@ -662,6 +665,34 @@ impl Default for Preferences {
             todos: Vec::new(),
         }
     }
+}
+
+#[derive(Deserialize)]
+struct IslandDisplay {
+    id: u32,
+    name: String,
+    main: bool,
+    notch: bool,
+}
+
+fn available_island_displays() -> Vec<IslandDisplay> {
+    #[cfg(target_os = "macos")]
+    unsafe {
+        let mut buffer = [0u8; 8192];
+        let length = nooklet_displays_copy(buffer.as_mut_ptr().cast(), buffer.len());
+        if length > 0 && length < buffer.len() {
+            return serde_json::from_slice(&buffer[..length]).unwrap_or_default();
+        }
+    }
+    Vec::new()
+}
+
+#[cfg(all(test, target_os = "macos"))]
+#[test]
+fn detects_the_current_mac_display_for_island_targeting() {
+    let displays = available_island_displays();
+    assert!(!displays.is_empty(), "macOS did not return any display targets");
+    assert!(displays.iter().any(|display| display.main));
 }
 
 struct DeskApp {
@@ -2441,7 +2472,8 @@ impl DeskApp {
                 }
                 nooklet_anchor_host_to_screen_top((!self.preview_mode && self.screenshot.is_none()
                     && !(self.expanded && self.clipboard_bottom_sheet
-                        && self.workspace == Workspace::Clipboard)) as i32);
+                        && self.workspace == Workspace::Clipboard)) as i32,
+                    self.prefs.island_display_id);
                 let hover_wanted = self.screenshot.is_none() && !self.preview_mode
                     && (self.prefs.open_on_hover
                         || (self.expanded && self.opened_by_hover && self.prefs.auto_close));
@@ -7412,6 +7444,40 @@ impl DeskApp {
                         egui::Slider::new(&mut self.prefs.content_padding, 8.0..=30.0)
                             .text("Content padding"),
                     );
+                });
+            }
+            "Displays" => {
+                section_title(ui, "ISLAND DISPLAY");
+                card().show(ui, |ui| {
+                    let displays = available_island_displays();
+                    let selected = displays.iter()
+                        .find(|display| display.id == self.prefs.island_display_id);
+                    let selected_name = selected.map(|display| display.name.as_str())
+                        .unwrap_or("Automatic (current display)");
+                    egui::ComboBox::from_id_salt("island_display")
+                        .selected_text(selected_name)
+                        .show_ui(ui, |ui| {
+                            if ui.selectable_value(&mut self.prefs.island_display_id, 0,
+                                "Automatic (current display)").clicked() {
+                                self.pocket_wake_context.request_repaint();
+                            }
+                            for display in &displays {
+                                let kind = if display.notch { "camera notch" }
+                                    else { "rounded island" };
+                                let main = if display.main { " · Main" } else { "" };
+                                let title = format!("{} · {}{}", display.name, kind, main);
+                                if ui.selectable_value(&mut self.prefs.island_display_id,
+                                    display.id, title).clicked() {
+                                    self.pocket_wake_context.request_repaint();
+                                }
+                            }
+                        });
+                    label(ui, "Choose where Bookland sits. A screen without a camera notch gets a rounded island at its top edge.",
+                        12.0, MUTED);
+                    if self.prefs.island_display_id != 0 && selected.is_none() {
+                        label(ui, "That display is disconnected. Bookland stays on the current screen until it returns.",
+                            12.0, MUTED);
+                    }
                 });
             }
             "Behavior" => {

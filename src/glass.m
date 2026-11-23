@@ -1,6 +1,7 @@
 #import <AppKit/AppKit.h>
 #import <QuartzCore/QuartzCore.h>
 #import <os/log.h>
+#include <string.h>
 
 // Keep winit's content view untouched: it owns keyboard and IME state.
 // A non-interactive child window carries native glass behind its transparent pixels.
@@ -280,12 +281,44 @@ int nooklet_install_glass(void *rawView) {
     return 1;
 }
 
-void nooklet_anchor_host_to_screen_top(int enabled) {
+size_t nooklet_displays_copy(char *buffer, size_t capacity) {
+    if (!buffer || capacity == 0) return 0;
+    NSMutableArray *rows = [NSMutableArray array];
+    for (NSScreen *screen in NSScreen.screens) {
+        NSNumber *number = screen.deviceDescription[@"NSScreenNumber"];
+        if (!number) continue;
+        NSRect left = screen.auxiliaryTopLeftArea;
+        NSRect right = screen.auxiliaryTopRightArea;
+        BOOL notch = !NSIsEmptyRect(left) && !NSIsEmptyRect(right)
+            && NSMinX(right) > NSMaxX(left) && screen.safeAreaInsets.top > 0;
+        BOOL isMain = number.unsignedIntValue == CGMainDisplayID();
+        [rows addObject:@{
+            @"id": number,
+            @"name": screen.localizedName ?: @"Display",
+            @"main": @(isMain),
+            @"notch": @(notch)
+        }];
+    }
+    NSData *json = [NSJSONSerialization dataWithJSONObject:rows options:0 error:nil];
+    if (!json || json.length >= capacity) { buffer[0] = '\0'; return 0; }
+    memcpy(buffer, json.bytes, json.length);
+    buffer[json.length] = '\0';
+    return json.length;
+}
+
+void nooklet_anchor_host_to_screen_top(int enabled, unsigned int displayID) {
     if (!nookletHostWindow || !enabled) return;
     // Winit positions borderless windows below the menu bar on this Mac even
     // when asked for y=0. The real notch is in the menu-bar band.
     nookletHostWindow.level = NSStatusWindowLevel;
-    NSScreen *screen = nookletHostWindow.screen ?: NSScreen.mainScreen;
+    NSScreen *screen = nil;
+    if (displayID != 0) {
+        for (NSScreen *candidate in NSScreen.screens) {
+            if ([candidate.deviceDescription[@"NSScreenNumber"] unsignedIntValue]
+                == displayID) { screen = candidate; break; }
+        }
+    }
+    if (!screen) screen = nookletHostWindow.screen ?: NSScreen.mainScreen;
     if (!screen) return;
     NSRect frame = nookletHostWindow.frame;
     NSRect display = screen.frame;
