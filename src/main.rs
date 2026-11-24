@@ -3884,7 +3884,11 @@ impl DeskApp {
             if wanted {
                 self.spectrum_state = bookland_audio_spectrum_copy(
                     self.spectrum_levels.as_mut_ptr(), self.spectrum_levels.len());
-                ctx.request_repaint_after(Duration::from_millis(50));
+                let audible = self.spectrum_state == 2
+                    && self.spectrum_levels.iter().any(|level| *level > 0.015);
+                // An idle system tap needs only occasional checks; the active
+                // spectrum still follows audio at its normal cadence.
+                ctx.request_repaint_after(Duration::from_millis(if audible { 50 } else { 250 }));
             } else {
                 self.spectrum_state = 0;
                 self.spectrum_levels.fill(0.0);
@@ -3895,6 +3899,14 @@ impl DeskApp {
     }
     fn paint_audio_spectrum(&self, ui: &mut egui::Ui, width: f32, height: f32) {
         let (rect, _) = ui.allocate_exact_size(Vec2::new(width, height), egui::Sense::hover());
+        if self.spectrum_state != 2
+            || !self.spectrum_levels.iter().any(|level| *level > 0.015) {
+            ui.painter().line_segment([
+                egui::pos2(rect.left(), rect.bottom() - 1.0),
+                egui::pos2(rect.right(), rect.bottom() - 1.0),
+            ], Stroke::new(0.7, Color32::from_rgba_unmultiplied(167, 181, 205, 52)));
+            return;
+        }
         let width = rect.width() / self.spectrum_levels.len() as f32;
         for (index, raw) in self.spectrum_levels.iter().enumerate() {
             let level = if self.spectrum_state == 2 { raw.clamp(0.0, 1.0) } else { 0.0 };
