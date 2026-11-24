@@ -4384,7 +4384,7 @@ impl DeskApp {
             self.save_prefs();
         }
         if !compact && ui.small_button(if self.clipboard_bottom_sheet { "Top" } else { "Bottom" })
-            .on_hover_text("Move Clipboard between the notch and bottom of screen").clicked() {
+            .on_hover_text("Move Clipboard between the island and bottom of screen").clicked() {
             self.clipboard_bottom_sheet = !self.clipboard_bottom_sheet;
             self.prefs.clipboard_open_bottom = self.clipboard_bottom_sheet;
         }
@@ -7630,7 +7630,7 @@ impl DeskApp {
                                 egui::Button::new(RichText::new("×").size(17.0).color(TEXT))
                                     .frame(false),
                             )
-                            .on_hover_text("Close notch")
+                            .on_hover_text("Close island")
                             .clicked()
                         {
                             self.expanded = false;
@@ -8129,7 +8129,7 @@ impl DeskApp {
                             self.notify(format!("Could not change login item: {error}"));
                         }
                     }
-                    ui.checkbox(&mut self.prefs.open_on_hover, "Open notch on hover");
+                    ui.checkbox(&mut self.prefs.open_on_hover, "Open island on hover");
                     ui.checkbox(&mut self.prefs.start_expanded, "Start expanded");
                 });
                 ui.add_space(13.0);
@@ -8150,7 +8150,7 @@ impl DeskApp {
                 ui.add_space(13.0);
                 section_title(ui, "DEMO");
                 settings_card(ui, |ui| {
-                    if small_button(ui, "Open notch").clicked() {
+                    if small_button(ui, "Open island").clicked() {
                         self.expanded = true;
                         self.opened_by_hover = false;
                     }
@@ -8182,13 +8182,15 @@ impl DeskApp {
                 section_title(ui, "WORKSPACE MENU");
                 settings_card(ui, |ui| {
                     egui::ComboBox::from_id_salt("menu_style")
-                        .selected_text(&self.prefs.menu_style)
+                        .selected_text(if self.prefs.menu_style == "In the notch" {
+                            "In the island"
+                        } else { &self.prefs.menu_style })
                         .show_ui(ui, |ui| {
                             for style in ["Compact", "Icons", "In the notch", "Dots"] {
                                 ui.selectable_value(
                                     &mut self.prefs.menu_style,
                                     style.into(),
-                                    style,
+                                    if style == "In the notch" { "In the island" } else { style },
                                 );
                             }
                         });
@@ -8197,7 +8199,7 @@ impl DeskApp {
                         "Show Clipboard and Prompts in island menu");
                 });
                 ui.add_space(12.0);
-                section_title(ui, "NOTCH SIZE");
+                section_title(ui, "ISLAND SIZE");
                 settings_card(ui, |ui| {
                     let glass = self.prefs.style == "Glass";
                     ui.add(egui::Slider::new(&mut self.prefs.open_width,
@@ -8278,7 +8280,7 @@ impl DeskApp {
                         "Lock while typing");
                     ui.separator();
                     ui.checkbox(&mut self.prefs.gestures_on_hover,
-                        "Allow gestures when hovering notch");
+                        "Allow gestures when hovering the island");
                     ui.add_enabled_ui(self.prefs.gestures_on_hover, |ui| {
                         ui.checkbox(&mut self.prefs.gesture_vertical,
                             "Open/close with vertical gestures");
@@ -8289,7 +8291,7 @@ impl DeskApp {
                                 "Invert media gesture actions");
                         });
                     });
-                    label(ui, "Clicking the notch keeps it open until you close it.", 12.0, MUTED);
+                    label(ui, "Clicking the island keeps it open until you close it.", 12.0, MUTED);
                 });
             }
             "Pocket" => {
@@ -8318,11 +8320,15 @@ impl DeskApp {
                         ui.horizontal(|ui| {
                             label(ui, "Volume placement", 12.0, MUTED);
                             egui::ComboBox::from_id_salt("volume_hud_style")
-                                .selected_text(&self.prefs.volume_hud_style)
+                                .selected_text(if self.prefs.volume_hud_style == "Inline by the notch" {
+                                    "Inline beside island"
+                                } else { "Below island" })
                                 .show_ui(ui, |ui| {
                                     for choice in ["Below the notch", "Inline by the notch"] {
                                         ui.selectable_value(&mut self.prefs.volume_hud_style,
-                                            choice.into(), choice);
+                                            choice.into(), if choice == "Below the notch" {
+                                                "Below island"
+                                            } else { "Inline beside island" });
                                     }
                                 });
                         });
@@ -8508,7 +8514,7 @@ impl DeskApp {
                 settings_card(ui, |ui| {
                     ui.horizontal(|ui| {
                         label(ui, "Open history", 12.0, MUTED);
-                        if ui.selectable_value(&mut self.prefs.clipboard_open_bottom, false, "In the Notch").clicked() {
+                        if ui.selectable_value(&mut self.prefs.clipboard_open_bottom, false, "In the island").clicked() {
                             self.clipboard_bottom_sheet = false;
                         }
                         if ui.selectable_value(&mut self.prefs.clipboard_open_bottom, true, "Bottom shelf").clicked() {
