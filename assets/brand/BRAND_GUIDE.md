@@ -29,7 +29,7 @@ Use the macOS system typeface for app UI. Use a clean sans-serif wordmark in mar
 - `bookland-banner.svg`: editable, text-sharp alternate banner.
 - `social-preview.png`: 1280×640 repository social preview candidate.
 - `bookland-icon-premium.png`: app icon and press kit image.
-- [Public Bookland website](https://bookland-mac-island.moshe99871.chatgpt.site): product overview and GitHub entry point.
+- [Public Bookland website](https://kyroceu.github.io/bookland/): product overview and GitHub entry point.
 
 Show real Bookland screenshots for feature demonstrations. The launch hero is a brand composition, not a screenshot of the app. Describe Codex approval controls as available for Bookland-connected turns; ordinary Codex desktop turns are not automatically mirrored into the island.
 
