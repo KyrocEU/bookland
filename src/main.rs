@@ -6805,7 +6805,6 @@ impl DeskApp {
                         }
                         let active = self.agents.iter().enumerate()
                             .filter(|(_, item)| item.status == "Working")
-                            .take(3)
                             .map(|(index, item)| (index, item.source.clone(), item.title.clone()))
                             .collect::<Vec<_>>();
                         let show_selectors = active.len() > 1 || active.first()
@@ -6817,13 +6816,15 @@ impl DeskApp {
                                     .size(12.0).color(MUTED),
                                 |ui| {
                                     ui.set_min_width(250.0);
-                                    for (index, source, title) in active {
-                                        if ui.selectable_label(index == self.selected_agent,
-                                            format!("{source} · {title}")).clicked() {
-                                            self.selected_agent = index;
-                                            ui.close();
+                                    egui::ScrollArea::vertical().max_height(240.0).show(ui, |ui| {
+                                        for (index, source, title) in active {
+                                            if ui.selectable_label(index == self.selected_agent,
+                                                format!("{source} · {title}")).clicked() {
+                                                self.selected_agent = index;
+                                                ui.close();
+                                            }
                                         }
-                                    }
+                                    });
                                 },
                             ).response.on_hover_text("Choose a working task");
                         }
