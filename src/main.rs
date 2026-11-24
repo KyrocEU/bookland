@@ -8076,7 +8076,7 @@ impl DeskApp {
             ui.add_space(10.0);
             label(ui, group, 10.0, MUTED);
             ui.add_space(5.0);
-            for (name, _) in items {
+            for (name, icon) in items {
                 let selected = self.settings_section == name;
                 let response = ui.add(egui::Button::new(
                     // Keep the name on the button for accessibility; paint it at a fixed
@@ -8094,11 +8094,9 @@ impl DeskApp {
                 ui.painter().rect_filled(badge, 5.0,
                     if selected { Color32::from_rgb(92, 133, 203) }
                     else { Color32::from_rgb(55, 68, 88) });
-                if let Some(initial) = name.chars().next() {
-                    ui.painter().text(badge.center(), Align2::CENTER_CENTER,
-                        initial.to_string(), FontId::proportional(10.5),
-                        Color32::from_rgb(243, 248, 255));
-                }
+                ui.painter().text(badge.center(), Align2::CENTER_CENTER,
+                    icon, FontId::proportional(11.0),
+                    Color32::from_rgb(243, 248, 255));
                 ui.painter().text(
                     egui::pos2(response.rect.left() + 32.0, response.rect.center().y),
                     Align2::LEFT_CENTER,
