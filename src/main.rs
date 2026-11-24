@@ -5019,17 +5019,24 @@ impl DeskApp {
             }
         }
         if self.calendar_status == 0 {
+            let saved_source = !self.prefs.calendar_id.is_empty();
             #[cfg(target_os = "macos")]
             let request_state = unsafe { nooklet_calendar_request_pending() };
             #[cfg(not(target_os = "macos"))]
             let request_state = 0;
             ui.horizontal(|ui| {
-                label(ui, "Connect Bookland to calendars already on this Mac.", 12.0, MUTED);
+                label(ui, if saved_source {
+                    "Calendar source saved · macOS access unavailable."
+                } else {
+                    "Connect Bookland to calendars already on this Mac."
+                }, 12.0, MUTED);
                 if request_state == 1 {
                     label(ui, "Waiting for macOS permission…", 12.0, MUTED);
                 } else if request_state == 2 {
                     label(ui, "macOS has not answered yet.", 12.0, MUTED);
-                } else if small_button(ui, "Connect Calendar").clicked() {
+                } else if small_button(ui, if saved_source {
+                    "Retry Access"
+                } else { "Connect Calendar" }).clicked() {
                     #[cfg(target_os = "macos")]
                     unsafe { nooklet_calendar_connect(); }
                     self.last_calendar_poll = Instant::now() - Duration::from_secs(35);
@@ -5212,7 +5219,11 @@ impl DeskApp {
                     }
                 }
                 _ => {
-                    label(ui, "Connect Calendar above to show events from your Mac calendars, including Google calendars already added to macOS.", 12.0, MUTED);
+                    label(ui, if self.prefs.calendar_id.is_empty() {
+                        "Connect Calendar above to show events from your Mac calendars, including Google calendars already added to macOS."
+                    } else {
+                        "Your calendar selection is saved. Restore macOS access above to show its events."
+                    }, 12.0, MUTED);
                 }
             }
         });
