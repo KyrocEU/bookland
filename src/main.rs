@@ -9319,8 +9319,12 @@ impl eframe::App for DeskApp {
             #[cfg(not(target_os = "macos"))]
             ctx.request_repaint_after(Duration::from_millis(8));
         } else {
+            // The native tracking area wakes the island immediately on pointer
+            // entry/exit. Avoid redrawing the closed Metal surface several
+            // times per second just to discover a hover that AppKit already
+            // reports. The next idle wake also processes background results.
             ctx.request_repaint_after(Duration::from_millis(if self.expanded { 100 }
-                else if self.prefs.open_on_hover { 350 } else { 500 }));
+                else if self.prefs.open_on_hover { 750 } else { 1000 }));
         }
         self.screenshot_events(ctx);
         self.poll(ctx);
