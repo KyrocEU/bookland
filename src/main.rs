@@ -368,6 +368,7 @@ struct CodexChatLine {
 struct AgentCompletion {
     source: String,
     path: PathBuf,
+    created_at: Instant,
 }
 
 fn selected_agent_index(selected: Option<(String, PathBuf)>, fallback: usize,
@@ -3313,6 +3314,7 @@ impl DeskApp {
                         self.agent_completion = Some(AgentCompletion {
                             source: done.source.clone(),
                             path: done.path.clone(),
+                            created_at: Instant::now(),
                         });
                         self.pending_activity_bubble = Some(format!("{} finished", done.source));
                     }
@@ -9021,6 +9023,10 @@ impl eframe::App for DeskApp {
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if self.agent_completion.as_ref().is_some_and(|done|
+            done.created_at.elapsed() >= Duration::from_secs(4)) {
+            self.agent_completion = None;
+        }
         if self.notch_shoulders.is_none() {
             let load = |name, bytes: &[u8]| -> Option<egui::TextureHandle> {
                 let image = image::load_from_memory(bytes).ok()?.to_rgba8();
