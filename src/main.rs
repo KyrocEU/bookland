@@ -8079,20 +8079,33 @@ impl DeskApp {
             for (name, _) in items {
                 let selected = self.settings_section == name;
                 let response = ui.add(egui::Button::new(
-                    RichText::new(format!("   {name}")).size(12.5)
-                        .color(if selected { TEXT } else { Color32::from_rgb(176, 180, 192) }))
+                    // Keep the name on the button for accessibility; paint it at a fixed
+                    // offset so the badge cannot overlap longer section names.
+                    RichText::new(name).size(12.5).color(Color32::TRANSPARENT))
                     .fill(if selected { Color32::from_rgb(48, 62, 91) }
                         else { Color32::TRANSPARENT })
                     .stroke(Stroke::new(if selected { 0.8 } else { 0.0 },
                         Color32::from_rgb(83, 107, 151)))
                     .corner_radius(9.0)
                     .min_size(Vec2::new(194.0, 29.0)));
-                if selected {
-                    ui.painter().rect_filled(egui::Rect::from_min_size(
-                        egui::pos2(response.rect.left() + 5.0, response.rect.top() + 6.0),
-                        Vec2::new(2.5, response.rect.height() - 12.0)), 2.0,
-                        Color32::from_rgb(129, 177, 255));
+                let badge = egui::Rect::from_center_size(
+                    egui::pos2(response.rect.left() + 17.0, response.rect.center().y),
+                    Vec2::splat(18.0));
+                ui.painter().rect_filled(badge, 5.0,
+                    if selected { Color32::from_rgb(92, 133, 203) }
+                    else { Color32::from_rgb(55, 68, 88) });
+                if let Some(initial) = name.chars().next() {
+                    ui.painter().text(badge.center(), Align2::CENTER_CENTER,
+                        initial.to_string(), FontId::proportional(10.5),
+                        Color32::from_rgb(243, 248, 255));
                 }
+                ui.painter().text(
+                    egui::pos2(response.rect.left() + 32.0, response.rect.center().y),
+                    Align2::LEFT_CENTER,
+                    name,
+                    FontId::proportional(12.5),
+                    if selected { TEXT } else { Color32::from_rgb(176, 180, 192) },
+                );
                 if response.clicked() { self.settings_section = name.into(); }
             }
         }
@@ -9458,8 +9471,11 @@ impl eframe::App for DeskApp {
         if self.settings_open {
             let builder = egui::ViewportBuilder::default()
                 .with_title("Bookland Settings")
-                .with_inner_size([840.0, 630.0])
-                .with_min_inner_size([700.0, 500.0])
+                .with_inner_size([860.0, 630.0])
+                // Both grouped columns and their control cards have fixed
+                // minimum widths. Keep the viewport wide enough that the
+                // right-hand controls are never clipped by a resize.
+                .with_min_inner_size([850.0, 600.0])
                 .with_window_level(egui::WindowLevel::AlwaysOnTop);
             ctx.show_viewport_immediate(
                 egui::ViewportId::from_hash_of("bookland_settings"),
