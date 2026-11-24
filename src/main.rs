@@ -2093,6 +2093,15 @@ fn card() -> Frame {
         .stroke(Stroke::new(0.7, Color32::from_rgba_unmultiplied(233, 238, 255, 43)))
         .inner_margin(Margin::same(14))
 }
+fn settings_card<R>(ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egui::Ui) -> R)
+    -> egui::InnerResponse<R> {
+    card().show(ui, |ui| {
+        // Settings cards should read as full-width grouped controls rather
+        // than a stack of tiny content-sized boxes.
+        ui.set_min_width(475.0);
+        add_contents(ui)
+    })
+}
 fn apply_visuals(ctx: &egui::Context, rounded: bool) {
     let mut visuals = egui::Visuals::dark();
     let radius = CornerRadius::same(if rounded { 11 } else { 3 });
@@ -8032,7 +8041,7 @@ impl DeskApp {
         match self.settings_section.as_str() {
             "General" => {
                 section_title(ui, "STARTUP");
-                card().show(ui, |ui| {
+                settings_card(ui, |ui| {
                     if ui.add_enabled(!self.preview_mode,
                         egui::Checkbox::new(&mut self.prefs.launch_at_login, "Launch at login"))
                         .on_hover_text("Takes effect at the next sign-in.").changed() {
@@ -8046,7 +8055,7 @@ impl DeskApp {
                 });
                 ui.add_space(13.0);
                 section_title(ui, "MEDIA SOURCE");
-                card().show(ui, |ui| {
+                settings_card(ui, |ui| {
                     egui::ComboBox::from_id_salt("media_source")
                         .selected_text(&self.prefs.media_source)
                         .show_ui(ui, |ui| {
@@ -8061,7 +8070,7 @@ impl DeskApp {
                 });
                 ui.add_space(13.0);
                 section_title(ui, "DEMO");
-                card().show(ui, |ui| {
+                settings_card(ui, |ui| {
                     if small_button(ui, "Open notch").clicked() {
                         self.expanded = true;
                         self.opened_by_hover = false;
@@ -8075,7 +8084,7 @@ impl DeskApp {
             }
             "Appearance" => {
                 section_title(ui, "STYLE");
-                card().show(ui, |ui| {
+                settings_card(ui, |ui| {
                     ui.horizontal(|ui| {
                         for style in ["Glass", "Classic"] {
                             ui.selectable_value(&mut self.prefs.style, style.into(), style);
@@ -8092,7 +8101,7 @@ impl DeskApp {
                 });
                 ui.add_space(12.0);
                 section_title(ui, "WORKSPACE MENU");
-                card().show(ui, |ui| {
+                settings_card(ui, |ui| {
                     egui::ComboBox::from_id_salt("menu_style")
                         .selected_text(&self.prefs.menu_style)
                         .show_ui(ui, |ui| {
@@ -8110,7 +8119,7 @@ impl DeskApp {
                 });
                 ui.add_space(12.0);
                 section_title(ui, "NOTCH SIZE");
-                card().show(ui, |ui| {
+                settings_card(ui, |ui| {
                     let glass = self.prefs.style == "Glass";
                     ui.add(egui::Slider::new(&mut self.prefs.open_width,
                         if glass { 900.0..=1200.0 } else { 420.0..=700.0 }).text("Open width"));
@@ -8135,7 +8144,7 @@ impl DeskApp {
                 });
                 ui.add_space(12.0);
                 section_title(ui, "DETAILS");
-                card().show(ui, |ui| {
+                settings_card(ui, |ui| {
                     ui.checkbox(&mut self.prefs.rounded_buttons, "Rounded buttons");
                     ui.add(
                         egui::Slider::new(&mut self.prefs.content_padding, 8.0..=30.0)
@@ -8145,7 +8154,7 @@ impl DeskApp {
             }
             "Displays" => {
                 section_title(ui, "ISLAND DISPLAY");
-                card().show(ui, |ui| {
+                settings_card(ui, |ui| {
                     let displays = available_island_displays();
                     let selected = displays.iter()
                         .find(|display| display.id == self.prefs.island_display_id);
@@ -8178,7 +8187,7 @@ impl DeskApp {
                 });
             }
             "Behavior" => {
-                card().show(ui, |ui| {
+                settings_card(ui, |ui| {
                     ui.checkbox(&mut self.prefs.open_on_hover, "Always open on hover");
                     ui.checkbox(&mut self.prefs.haptic_feedback, "Haptic feedback");
                     ui.checkbox(&mut self.prefs.auto_close, "Close after the pointer leaves");
@@ -8205,7 +8214,7 @@ impl DeskApp {
                 });
             }
             "Pocket" => {
-                card().show(ui, |ui| {
+                settings_card(ui, |ui| {
                     ui.checkbox(&mut self.prefs.pocket_shake,
                         "Shake a dragged file to open floating Pocket");
                     label(ui, "Content in the closed island", 12.0, MUTED);
@@ -8222,7 +8231,7 @@ impl DeskApp {
                 self.pipeline_editor(ui);
             }
             "Live Activities" => {
-                card().show(ui, |ui| {
+                settings_card(ui, |ui| {
                     ui.checkbox(&mut self.prefs.notify_timer, "Notify when Pomodoro finishes");
                     ui.checkbox(&mut self.prefs.volume_hud,
                         "Show a Liquid Glass volume HUD");
@@ -8307,7 +8316,7 @@ impl DeskApp {
                 let mut rows = Vec::with_capacity(widgets.len());
                 let pointer = ui.ctx().input(|input| input.pointer.interact_pos());
                 for (i, widget) in widgets.iter().enumerate() {
-                    let row = card().show(ui, |ui| {
+                    let row = settings_card(ui, |ui| {
                         ui.horizontal(|ui| {
                             let (handle_rect, handle) = ui.allocate_exact_size(
                                 Vec2::new(20.0, 22.0), egui::Sense::drag());
@@ -8390,7 +8399,7 @@ impl DeskApp {
             }
             "Clipboard" => {
                 section_title(ui, "HISTORY");
-                card().show(ui, |ui| {
+                settings_card(ui, |ui| {
                     ui.checkbox(&mut self.prefs.capture_clipboard, "Capture automatically");
                     if ui.checkbox(&mut self.prefs.persist_clipboard,
                         "Save history, including images, on this Mac").changed() {
@@ -8417,7 +8426,7 @@ impl DeskApp {
                 });
                 ui.add_space(12.0);
                 section_title(ui, "SHELF");
-                card().show(ui, |ui| {
+                settings_card(ui, |ui| {
                     ui.horizontal(|ui| {
                         label(ui, "Open history", 12.0, MUTED);
                         if ui.selectable_value(&mut self.prefs.clipboard_open_bottom, false, "In the Notch").clicked() {
@@ -8438,7 +8447,7 @@ impl DeskApp {
                 });
                 ui.add_space(12.0);
                 section_title(ui, "PRIVACY");
-                card().show(ui, |ui| {
+                settings_card(ui, |ui| {
                     ui.checkbox(&mut self.prefs.clipboard_ignore_passwords,
                         "Ignore copies marked confidential or temporary");
                     label(ui, "Ignored apps", 12.0, MUTED);
@@ -8467,7 +8476,7 @@ impl DeskApp {
                 });
             }
             "Tray" | "Drop Area" => {
-                card().show(ui, |ui| {
+                settings_card(ui, |ui| {
                     label(ui, "Dropped files are saved locally and can be revealed in Finder.", 12.0, MUTED);
                     if small_button(ui, "Clear tray").clicked() {
                         self.files.clear();
@@ -8476,7 +8485,7 @@ impl DeskApp {
                 });
             }
             "Prompter" => {
-                card().show(ui, |ui| {
+                settings_card(ui, |ui| {
                     ui.checkbox(&mut self.prefs.prompter_enabled, "Show Prompter in the island menu");
                     label(ui, "Mode", 12.0, MUTED);
                     ui.horizontal(|ui| {
@@ -8523,7 +8532,7 @@ impl DeskApp {
                 });
             }
             "Downloads" => {
-                card().show(ui, |ui| {
+                settings_card(ui, |ui| {
                     label(ui, "Watch active and recent files in a folder.", 12.0, MUTED);
                     if ui.checkbox(&mut self.prefs.watch_downloads,
                         "Show a result card when a download finishes").changed() {
@@ -8563,12 +8572,12 @@ impl DeskApp {
                 });
             }
             "Terminal" => {
-                card().show(ui, |ui| {
+                settings_card(ui, |ui| {
                     label(ui, "Add the Terminal widget in Nook settings. It runs only commands you type and click Run.", 12.0, MUTED);
                 });
             }
             "Permissions" => {
-                card().show(ui, |ui| {
+                settings_card(ui, |ui| {
                     label(ui, &format!("Calendar: {}", if self.calendar_status == 1 { "Connected" } else if self.calendar_status == 2 { "Denied" } else { "Not connected" }), 13.0, TEXT);
                     if small_button(ui, "Open Privacy Settings").clicked() {
                         let _ = Command::new("open").arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars").spawn();
@@ -8576,14 +8585,14 @@ impl DeskApp {
                 });
             }
             "Keyboard Shortcuts" => {
-                card().show(ui, |ui| {
+                settings_card(ui, |ui| {
                     ui.checkbox(&mut self.prefs.global_shortcut, "Use Command+Option+N to open or close the island");
                     ui.checkbox(&mut self.prefs.clipboard_shortcut, "Use Control+Command+6 to open Clipboard from the bottom");
                     label(ui, "The shortcut works while another app is in front.", 12.0, MUTED);
                 });
             }
             "Agents" => {
-                card().show(ui, |ui| {
+                settings_card(ui, |ui| {
                     section_title(ui, "CODEX IN THE ISLAND");
                     label(ui, &format!("Codex works in {}", codex_workspace().display()), 12.0, MUTED);
                     if small_button(ui, "Show project folder").clicked() {
@@ -8614,7 +8623,7 @@ impl DeskApp {
                 });
             }
             "About" => {
-                card().show(ui, |ui| {
+                settings_card(ui, |ui| {
                     label(ui, &format!("Bookland {}", env!("CARGO_PKG_VERSION")),
                         18.0, TEXT);
                     label(ui, "A living island for your Mac.", 13.0, MUTED);
@@ -8631,7 +8640,7 @@ impl DeskApp {
                 });
                 ui.add_space(12.0);
                 section_title(ui, "INDEPENDENT OPEN SOURCE PROJECT");
-                card().show(ui, |ui| {
+                settings_card(ui, |ui| {
                     label(ui, "Bookland's original code is MIT licensed. Third-party components and marks keep their own terms; see the repository notices.",
                         12.0, TEXT);
                     label(ui, "The island and major workspaces are working. Motion, integrations, and feature coverage are still in progress.",
@@ -8639,7 +8648,7 @@ impl DeskApp {
                 });
             }
             _ => {
-                card().show(ui, |ui| {
+                settings_card(ui, |ui| {
                     label(
                         ui,
                         "This section was visible in the demo settings.",
@@ -8810,9 +8819,11 @@ impl DeskApp {
                         .show(ui, |ui| {
                             ui.set_width(535.0);
                             ui.set_min_height(570.0);
-                            egui::ScrollArea::vertical()
-                                .max_height(570.0)
-                                .show(ui, |ui| self.settings_content(ui));
+                            ui.vertical(|ui| {
+                                egui::ScrollArea::vertical()
+                                    .max_height(570.0)
+                                    .show(ui, |ui| self.settings_content(ui));
+                            });
                         });
                 });
             });
