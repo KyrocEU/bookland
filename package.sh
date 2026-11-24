@@ -1,6 +1,7 @@
 #!/bin/sh
 set -eu
 cd "$(dirname "$0")"
+sign_identity=${BOOKLAND_SIGN_IDENTITY:--}
 cargo build --release
 cmake -S vendor/mediaremote-adapter -B vendor/mediaremote-adapter/build -DCMAKE_BUILD_TYPE=Release
 cmake --build vendor/mediaremote-adapter/build --target MediaRemoteAdapter -j 4
@@ -24,5 +25,6 @@ cp vendor/mediaremote-adapter/bin/mediaremote-adapter.pl Bookland.app/Contents/R
 cp vendor/mediaremote-adapter/LICENSE Bookland.app/Contents/Resources/MediaRemoteAdapter-LICENSE
 rm -rf Bookland.app/Contents/Frameworks/MediaRemoteAdapter.framework
 cp -R vendor/mediaremote-adapter/build/MediaRemoteAdapter.framework Bookland.app/Contents/Frameworks/
-codesign --force --sign - --timestamp=none Bookland.app/Contents/Resources/yt-dlp_macos
-codesign --force --deep --sign - --timestamp=none Bookland.app
+codesign --force --sign "$sign_identity" --timestamp=none Bookland.app/Contents/Resources/yt-dlp_macos
+codesign --force --deep --sign "$sign_identity" --timestamp=none Bookland.app
+codesign --verify --deep --strict Bookland.app
