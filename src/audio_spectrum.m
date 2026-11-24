@@ -99,7 +99,9 @@ static void booklandSpectrumConsume(const AudioBufferList *buffers) {
     for (int band = 0; band < BooklandSpectrumBands; band++) {
         float rms = sqrtf(sum[band] / (count * channels));
         float decibels = 20.0f * log10f(rms + 0.000001f);
-        float level = fmaxf(0, fminf(1, (decibels + 65.0f) / 47.0f));
+        // The tap receives pre-volume output. A higher ceiling leaves headroom
+        // for mastered tracks instead of pinning every band at full height.
+        float level = fmaxf(0, fminf(1, (decibels + 48.0f) / 45.0f));
         booklandSpectrumSmoothed[band] += 0.38f * (level - booklandSpectrumSmoothed[band]);
         uint32_t bits;
         memcpy(&bits, &booklandSpectrumSmoothed[band], sizeof(bits));

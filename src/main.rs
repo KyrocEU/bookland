@@ -2615,7 +2615,14 @@ impl DeskApp {
             craft_agents: Vec::new(),
             craft_rx: None,
             last_craft_poll: now - Duration::from_secs(30),
-            calendar_status: 0,
+            // Read the persisted macOS grant before the first Calendar frame so
+            // a connected calendar never flashes the Connect button on launch.
+            calendar_status: {
+                #[cfg(target_os = "macos")]
+                { unsafe { nooklet_calendar_status() } }
+                #[cfg(not(target_os = "macos"))]
+                { 0 }
+            },
             calendar_choices: Vec::new(),
             calendar_events: Vec::new(),
             calendar_snapshot_version: 0,
@@ -6461,7 +6468,9 @@ impl DeskApp {
                             .fill(if active { Color32::from_rgb(57, 58, 62) }
                                 else { Color32::TRANSPARENT })
                             .corner_radius(17).min_size(Vec2::new(if labeled { 96.0 } else { 30.0 }, 29.0)))
-                            .on_hover_text(menu_name);
+                            .on_hover_text(if self.workspace == workspace {
+                                "Collapse island"
+                            } else { menu_name });
                         response.widget_info(|| egui::WidgetInfo::labeled(
                             egui::WidgetType::Button, true, menu_name));
                         paint_workspace_icon(ui, response.rect, workspace, self.bookland_mark.as_ref(),
@@ -6471,15 +6480,22 @@ impl DeskApp {
                                 Align2::LEFT_CENTER, menu_name, FontId::proportional(12.0), TEXT);
                         }
                         if response.clicked() {
-                            self.workspace = workspace;
-                            self.workspace_chosen_by_user = true;
-                            if workspace == Workspace::Agents {
-                                self.agent_chat_open = false;
-                                self.agent_usage_view = false;
-                            }
-                            if workspace == Workspace::Clipboard {
-                                self.clipboard_bottom_sheet = self.prefs.clipboard_open_bottom;
-                                self.clipboard_focus_pending = self.prefs.clipboard_focus_search;
+                            if self.workspace == workspace {
+                                self.expanded = false;
+                                self.opened_by_hover = false;
+                                self.hover_blocked_until_exit = true;
+                                self.clipboard_bottom_sheet = false;
+                            } else {
+                                self.workspace = workspace;
+                                self.workspace_chosen_by_user = true;
+                                if workspace == Workspace::Agents {
+                                    self.agent_chat_open = false;
+                                    self.agent_usage_view = false;
+                                }
+                                if workspace == Workspace::Clipboard {
+                                    self.clipboard_bottom_sheet = self.prefs.clipboard_open_bottom;
+                                    self.clipboard_focus_pending = self.prefs.clipboard_focus_search;
+                                }
                             }
                         }
                     }
@@ -7460,7 +7476,9 @@ impl DeskApp {
                                 .corner_radius(if self.prefs.rounded_buttons { 20 } else { 4 })
                                 .min_size(Vec2::new(if labeled { 92.0 } else { 42.0 }, 34.0)),
                             )
-                            .on_hover_text(menu_name);
+                            .on_hover_text(if self.workspace == workspace {
+                                "Collapse island"
+                            } else { menu_name });
                         paint_workspace_icon(
                             ui,
                             response.rect,
@@ -7470,10 +7488,17 @@ impl DeskApp {
                             self.prefs.menu_style == "Dots",
                         );
                         if response.clicked() {
-                            self.workspace = workspace;
-                            if workspace == Workspace::Clipboard {
-                                self.clipboard_bottom_sheet = self.prefs.clipboard_open_bottom;
-                                self.clipboard_focus_pending = self.prefs.clipboard_focus_search;
+                            if self.workspace == workspace {
+                                self.expanded = false;
+                                self.opened_by_hover = false;
+                                self.hover_blocked_until_exit = true;
+                                self.clipboard_bottom_sheet = false;
+                            } else {
+                                self.workspace = workspace;
+                                if workspace == Workspace::Clipboard {
+                                    self.clipboard_bottom_sheet = self.prefs.clipboard_open_bottom;
+                                    self.clipboard_focus_pending = self.prefs.clipboard_focus_search;
+                                }
                             }
                         }
                     }
@@ -7833,7 +7858,7 @@ impl DeskApp {
             } else { false };
             if !completion_clicked { self.choose_hover_workspace(); }
             self.expanded = true;
-            self.opened_by_hover = false;
+            self.opened_by_hover = true;
             self.hover_blocked_until_exit = false;
             self.last_hovered = Instant::now();
             self.hover_opened_at = self.last_hovered;
@@ -7895,14 +7920,15 @@ impl DeskApp {
     fn settings_nav(&mut self, ui: &mut egui::Ui) {
         let brand = self.bookland_mark.clone();
         Frame::new()
-            .fill(Color32::from_rgb(22, 34, 52))
-            .stroke(Stroke::new(1.0, Color32::from_rgb(62, 82, 112)))
-            .corner_radius(13.0)
-            .inner_margin(10.0)
+            .fill(Color32::from_rgb(26, 35, 52))
+            .stroke(Stroke::new(0.8, Color32::from_rgb(78, 101, 139)))
+            .corner_radius(16.0)
+            .shadow(egui::epaint::Shadow { offset: [0, 5], blur: 16, spread: 0,
+                color: Color32::from_black_alpha(75) })
+            .inner_margin(13.0)
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    let (rect, _) = ui.allocate_exact_size(
-                        Vec2::splat(40.0), egui::Sense::hover());
+                    let (rect, _) = ui.allocate_exact_size(Vec2::splat(42.0), egui::Sense::hover());
                     if let Some(mark) = &brand {
                         ui.painter().image(mark.id(), rect,
                             egui::Rect::from_min_max(egui::Pos2::ZERO,
@@ -7914,12 +7940,13 @@ impl DeskApp {
                             "B", FontId::proportional(23.0), TEXT);
                     }
                     ui.vertical(|ui| {
-                        label(ui, "Bookland", 16.0, TEXT);
+                        ui.label(RichText::new("Bookland").size(17.0).strong().color(TEXT));
                         label(ui, "A living island for Mac", 10.0,
-                            Color32::from_rgb(161, 187, 221));
+                            Color32::from_rgb(173, 194, 226));
                     });
                 });
             });
+        ui.add_space(12.0);
         for (group, items) in [
             (
                 "SETTINGS",
@@ -7961,49 +7988,47 @@ impl DeskApp {
             ui.add_space(10.0);
             label(ui, group, 10.0, MUTED);
             ui.add_space(5.0);
-            for (index, (name, icon)) in items.into_iter().enumerate() {
+            for (name, _) in items {
                 let selected = self.settings_section == name;
-                let colors = [
-                    Color32::from_rgb(91, 140, 240),
-                    Color32::from_rgb(146, 113, 222),
-                    Color32::from_rgb(231, 131, 104),
-                    Color32::from_rgb(88, 178, 156),
-                ];
-                ui.horizontal(|ui| {
-                    let (rect, _) = ui.allocate_exact_size(Vec2::splat(21.0), egui::Sense::hover());
-                    ui.painter()
-                        .rect_filled(rect, 5.0, colors[index % colors.len()]);
-                    ui.painter().text(
-                        rect.center(),
-                        Align2::CENTER_CENTER,
-                        icon,
-                        FontId::proportional(13.0),
-                        TEXT,
-                    );
-                    let response = ui.add(
-                        egui::Button::new(RichText::new(name).size(12.0).color(if selected {
-                            TEXT
-                        } else {
-                            MUTED
-                        }))
-                        .fill(if selected {
-                            CARD_2
-                        } else {
-                            Color32::TRANSPARENT
-                        })
-                        .corner_radius(7)
-                        .min_size(Vec2::new(146.0, 26.0)),
-                    );
-                    if response.clicked() {
-                        self.settings_section = name.into();
-                    }
-                });
+                let response = ui.add(egui::Button::new(
+                    RichText::new(format!("   {name}")).size(12.5)
+                        .color(if selected { TEXT } else { Color32::from_rgb(176, 180, 192) }))
+                    .fill(if selected { Color32::from_rgb(48, 62, 91) }
+                        else { Color32::TRANSPARENT })
+                    .stroke(Stroke::new(if selected { 0.8 } else { 0.0 },
+                        Color32::from_rgb(83, 107, 151)))
+                    .corner_radius(9.0)
+                    .min_size(Vec2::new(194.0, 29.0)));
+                if selected {
+                    ui.painter().rect_filled(egui::Rect::from_min_size(
+                        egui::pos2(response.rect.left() + 5.0, response.rect.top() + 6.0),
+                        Vec2::new(2.5, response.rect.height() - 12.0)), 2.0,
+                        Color32::from_rgb(129, 177, 255));
+                }
+                if response.clicked() { self.settings_section = name.into(); }
             }
         }
     }
     fn settings_content(&mut self, ui: &mut egui::Ui) {
-        label(ui, &self.settings_section, 24.0, TEXT);
-        ui.add_space(5.0);
+        label(ui, "BOOKLAND  /  SETTINGS", 10.0, Color32::from_rgb(132, 170, 230));
+        ui.add_space(7.0);
+        ui.label(RichText::new(&self.settings_section).size(27.0).strong().color(TEXT));
+        let description = match self.settings_section.as_str() {
+            "General" => "Startup, media source, and everyday behavior.",
+            "Appearance" => "Shape, glass, and motion for your island.",
+            "Displays" => "Choose where Bookland appears.",
+            "Behavior" => "Tune how the island opens and closes.",
+            "Permissions" => "Control access to Mac features.",
+            "Music" => "Playback, lyrics, audio, and AirPods.",
+            "Nook" => "Arrange the controls inside your island.",
+            "Calendar" => "Your calendar connection and date display.",
+            "Agents" => "Codex activity and island decisions.",
+            _ => "Make Bookland yours.",
+        };
+        label(ui, description, 11.0, MUTED);
+        ui.add_space(12.0);
+        ui.separator();
+        ui.add_space(12.0);
         match self.settings_section.as_str() {
             "General" => {
                 section_title(ui, "STARTUP");
@@ -8757,32 +8782,38 @@ impl DeskApp {
         apply_visuals(ctx, self.prefs.rounded_buttons);
         let before = self.prefs.clone();
         egui::CentralPanel::default()
-            .frame(Frame::new().fill(Color32::from_rgb(22, 23, 28)))
+            .frame(Frame::new().fill(Color32::from_rgb(14, 17, 23))
+                .inner_margin(Margin::same(11)))
             .show(ctx, |ui| {
+                ui.spacing_mut().item_spacing = Vec2::new(9.0, 8.0);
                 ui.horizontal(|ui| {
                     Frame::new()
-                        .fill(Color32::from_rgb(29, 30, 36))
-                        .inner_margin(12)
+                        .fill(Color32::from_rgb(24, 27, 35))
+                        .stroke(Stroke::new(0.8, Color32::from_rgb(48, 54, 68)))
+                        .corner_radius(17.0)
+                        .inner_margin(13)
                         .show(ui, |ui| {
-                            ui.set_width(208.0);
-                            ui.set_min_height(590.0);
+                            ui.set_width(202.0);
+                            ui.set_min_height(580.0);
                             ui.vertical(|ui| {
                                 egui::ScrollArea::vertical()
-                                    .max_height(590.0)
+                                    .max_height(580.0)
                                     .show(ui, |ui| self.settings_nav(ui));
                             });
                         });
-                    ui.add_space(16.0);
-                    ui.vertical(|ui| {
-                        ui.set_width(560.0);
-                        ui.set_min_height(590.0);
-                        egui::ScrollArea::vertical()
-                            .max_height(590.0)
-                            .show(ui, |ui| {
-                                ui.add_space(14.0);
-                                self.settings_content(ui);
-                            });
-                    });
+                    ui.add_space(2.0);
+                    Frame::new()
+                        .fill(Color32::from_rgb(28, 30, 38))
+                        .stroke(Stroke::new(0.8, Color32::from_rgb(53, 58, 72)))
+                        .corner_radius(17.0)
+                        .inner_margin(18)
+                        .show(ui, |ui| {
+                            ui.set_width(535.0);
+                            ui.set_min_height(570.0);
+                            egui::ScrollArea::vertical()
+                                .max_height(570.0)
+                                .show(ui, |ui| self.settings_content(ui));
+                        });
                 });
             });
         if self.tour_step.is_some() {
