@@ -5,6 +5,7 @@
 
 static EKEventStore *nookletEventStore;
 static BOOL nookletCalendarPermissionPending;
+static NSTimeInterval nookletCalendarPermissionStartedAt;
 static NSString *nookletEventsJSON;
 static NSString *nookletCalendarsJSON;
 static unsigned long long nookletEventsGeneration;
@@ -222,7 +223,9 @@ void nooklet_calendar_refresh(const char *calendarID, int monthOffset) {
 
 int nooklet_calendar_request_pending(void) {
     @synchronized([EKEventStore class]) {
-        return nookletCalendarPermissionPending ? 1 : 0;
+        if (!nookletCalendarPermissionPending) return 0;
+        return [NSDate timeIntervalSinceReferenceDate]
+            - nookletCalendarPermissionStartedAt >= 30.0 ? 2 : 1;
     }
 }
 
@@ -231,6 +234,7 @@ void nooklet_calendar_connect(void) {
     @synchronized([EKEventStore class]) {
         if (nookletCalendarPermissionPending) return;
         nookletCalendarPermissionPending = YES;
+        nookletCalendarPermissionStartedAt = [NSDate timeIntervalSinceReferenceDate];
     }
     // The island can receive a click while another app is still active.
     // Make this explicit user request eligible for a macOS privacy sheet.
@@ -238,6 +242,7 @@ void nooklet_calendar_connect(void) {
     [eventStore() requestFullAccessToEventsWithCompletion:^(BOOL granted, NSError *error) {
         @synchronized([EKEventStore class]) {
             nookletCalendarPermissionPending = NO;
+            nookletCalendarPermissionStartedAt = 0;
         }
         if (!granted && error) {
             NSLog(@"Bookland Calendar access request failed: %@", error.localizedDescription);

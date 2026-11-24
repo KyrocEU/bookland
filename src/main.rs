@@ -4998,22 +4998,25 @@ impl DeskApp {
         }
         if self.calendar_status == 0 {
             #[cfg(target_os = "macos")]
-            let request_pending = unsafe { nooklet_calendar_request_pending() != 0 };
+            let request_state = unsafe { nooklet_calendar_request_pending() };
             #[cfg(not(target_os = "macos"))]
-            let request_pending = false;
+            let request_state = 0;
             ui.horizontal(|ui| {
                 label(ui, "Connect Bookland to calendars already on this Mac.", 12.0, MUTED);
-                if request_pending {
+                if request_state == 1 {
                     label(ui, "Waiting for macOS permission…", 12.0, MUTED);
+                } else if request_state == 2 {
+                    label(ui, "macOS has not answered yet.", 12.0, MUTED);
                 } else if small_button(ui, "Connect Calendar").clicked() {
                     #[cfg(target_os = "macos")]
                     unsafe { nooklet_calendar_connect(); }
                     self.last_calendar_poll = Instant::now() - Duration::from_secs(35);
                 }
             });
-            if request_pending {
-                label(ui, "If no macOS prompt appears, check Bookland's Calendar access in System Settings.",
-                    11.0, MUTED);
+            if request_state == 1 {
+                label(ui, "If no macOS prompt appears, check Bookland's Calendar access in System Settings.", 11.0, MUTED);
+            } else if request_state == 2 {
+                label(ui, "A rebuilt Bookland may need a fresh Calendar grant. Check Full Access for this build in System Settings, then reopen Bookland.", 11.0, MUTED);
             }
             if small_button(ui, "Open Calendar Permissions").clicked() {
                 let _ = Command::new("open")
