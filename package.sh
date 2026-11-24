@@ -2,7 +2,7 @@
 set -eu
 cd "$(dirname "$0")"
 sign_identity=${BOOKLAND_SIGN_IDENTITY:--}
-cargo build --release
+cargo build --release --locked
 cmake -S vendor/mediaremote-adapter -B vendor/mediaremote-adapter/build -DCMAKE_BUILD_TYPE=Release
 cmake --build vendor/mediaremote-adapter/build --target MediaRemoteAdapter -j 4
 mkdir -p Bookland.app/Contents/MacOS

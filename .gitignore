@@ -3,6 +3,7 @@
 .env.*
 target/
 Bookland.app/
+release/
 vendor/yt-dlp_macos
 vendor/mediaremote-adapter/build/
 UNVERIFIED.md
