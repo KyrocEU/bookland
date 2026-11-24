@@ -165,10 +165,68 @@ struct CalendarEvent {
     calendar: String,
     #[serde(default)]
     day_key: String,
+    #[serde(default)]
+    day_keys: Vec<String>,
     #[allow(dead_code)]
     all_day: bool,
     #[serde(default)]
     display_time: String,
+}
+
+impl CalendarEvent {
+    fn occurs_on_day(&self, key: &str) -> bool {
+        self.day_key == key || self.day_keys.iter().any(|day| day == key)
+    }
+}
+
+fn calendar_day_counts(events: &[CalendarEvent], year: i32, month: u32) -> [u8; 32] {
+    let prefix = format!("{year:04}-{month:02}-");
+    let mut counts = [0_u8; 32];
+    for event in events {
+        let mut counted = [false; 32];
+        for key in std::iter::once(&event.day_key).chain(event.day_keys.iter()) {
+            if let Some(day) = key.strip_prefix(&prefix)
+                .and_then(|value| value.parse::<usize>().ok()) {
+                if day <= 31 && !counted[day] {
+                    counts[day] = counts[day].saturating_add(1);
+                    counted[day] = true;
+                }
+            }
+        }
+    }
+    counts
+}
+
+#[cfg(test)]
+mod calendar_event_tests {
+    use super::{calendar_day_counts, CalendarEvent};
+
+    #[test]
+    fn event_spanning_dates_appears_on_each_day_without_including_exclusive_end() {
+        let event: CalendarEvent = serde_json::from_str(r#"{
+            "title":"Conference", "start":0, "end":1,
+            "calendar":"Office", "day_key":"2026-11-24",
+            "day_keys":["2026-11-24","2026-11-25","2026-11-26"],
+            "all_day":true
+        }"#).unwrap();
+        assert!(event.occurs_on_day("2026-11-24"));
+        assert!(event.occurs_on_day("2026-11-25"));
+        assert!(event.occurs_on_day("2026-11-26"));
+        assert!(!event.occurs_on_day("2026-11-27"));
+        let counts = calendar_day_counts(&[event], 2026, 11);
+        assert_eq!((counts[24], counts[25], counts[26], counts[27]), (1, 1, 1, 0));
+    }
+
+    #[test]
+    fn older_event_snapshots_still_show_the_start_day() {
+        let event: CalendarEvent = serde_json::from_str(r#"{
+            "title":"Meeting", "start":0, "end":1,
+            "calendar":"Office", "day_key":"2026-11-24",
+            "all_day":false
+        }"#).unwrap();
+        assert!(event.occurs_on_day("2026-11-24"));
+        assert!(!event.occurs_on_day("2026-11-25"));
+    }
 }
 
 #[derive(Clone, Deserialize)]
@@ -5010,14 +5068,7 @@ impl DeskApp {
         }
         let month_year = self.calendar_month.title.clone();
         let month = self.calendar_month.clone();
-        let prefix = format!("{:04}-{:02}-", month.year, month.month);
-        let mut day_counts = [0_u8; 32];
-        for event in &self.calendar_events {
-            if let Some(day) = event.day_key.strip_prefix(&prefix)
-                .and_then(|value| value.parse::<usize>().ok()) {
-                if day <= 31 { day_counts[day] = day_counts[day].saturating_add(1); }
-            }
-        }
+        let day_counts = calendar_day_counts(&self.calendar_events, month.year, month.month);
         if self.calendar_status == 0 {
             let saved_source = !self.prefs.calendar_id.is_empty();
             #[cfg(target_os = "macos")]
@@ -5192,7 +5243,7 @@ impl DeskApp {
                     let visible: Vec<_> = self.calendar_events.iter()
                         .filter(|event| selected_key.as_ref().map_or(
                             event.end >= now && event.start <= now + 86400.0 * 45.0,
-                            |key| &event.day_key == key))
+                            |key| event.occurs_on_day(key)))
                         .take(8).collect();
                     if self.calendar_query_pending && visible.is_empty() {
                         label(ui, "Loading events…", 13.0, MUTED);

@@ -114,6 +114,30 @@ static EKEventStore *eventStore(void) {
     return nookletEventStore;
 }
 
+static NSArray<NSString *> *booklandEventDayKeys(EKEvent *event,
+    NSCalendar *calendar, NSDateFormatter *formatter,
+    NSDate *monthStart, NSDate *monthEnd) {
+    if (!event.startDate || !monthStart || !monthEnd) return @[];
+    NSDate *first = [[calendar startOfDayForDate:event.startDate]
+        laterDate:monthStart];
+    // EventKit's end is exclusive. A meeting ending at midnight belongs to
+    // the previous day; an all-day event's end is the next day's midnight.
+    NSDate *lastMoment = event.endDate && [event.endDate compare:event.startDate] == NSOrderedDescending
+        ? [event.endDate dateByAddingTimeInterval:-0.001] : event.startDate;
+    NSDate *last = [calendar startOfDayForDate:lastMoment];
+    NSMutableArray<NSString *> *keys = [NSMutableArray array];
+    for (NSDate *day = first; day && [day compare:last] != NSOrderedDescending
+        && [day compare:monthEnd] == NSOrderedAscending && keys.count < 31;) {
+        NSString *key = [formatter stringFromDate:day];
+        if (key) [keys addObject:key];
+        NSDate *next = [calendar dateByAddingUnit:NSCalendarUnitDay value:1
+            toDate:day options:0];
+        if (!next || [next compare:day] != NSOrderedDescending) break;
+        day = next;
+    }
+    return keys;
+}
+
 int nooklet_calendar_status(void) {
     EKAuthorizationStatus status = [EKEventStore authorizationStatusForEntityType:EKEntityTypeEvent];
     if (status == EKAuthorizationStatusFullAccess) return 1;
@@ -153,6 +177,8 @@ void nooklet_calendar_refresh(const char *calendarID, int monthOffset) {
                 calendars = selected ? @[selected] : @[];
             }
             NSMutableArray<EKEvent *> *events = [NSMutableArray array];
+            NSDate *monthStart = nil;
+            NSDate *monthEnd = nil;
             if (!identifier || calendars.count != 0) {
                 NSCalendar *calendar = booklandCalendar();
                 NSDate *now = [NSDate date];
@@ -164,8 +190,8 @@ void nooklet_calendar_refresh(const char *calendarID, int monthOffset) {
                 NSDateComponents *parts = [calendar components:
                     NSCalendarUnitYear | NSCalendarUnitMonth fromDate:shifted];
                 parts.day = 1;
-                NSDate *monthStart = [calendar dateFromComponents:parts];
-                NSDate *monthEnd = [calendar dateByAddingUnit:NSCalendarUnitMonth value:1
+                monthStart = [calendar dateFromComponents:parts];
+                monthEnd = [calendar dateByAddingUnit:NSCalendarUnitMonth value:1
                     toDate:monthStart options:0];
                 BOOL overlaps = [monthStart compare:upcomingEnd] != NSOrderedDescending
                     && [monthEnd compare:upcomingStart] != NSOrderedAscending;
@@ -193,6 +219,7 @@ void nooklet_calendar_refresh(const char *calendarID, int monthOffset) {
             dayKeyFormat.locale = timedFormat.locale;
             dayKeyFormat.timeZone = NSTimeZone.localTimeZone;
             dayKeyFormat.dateFormat = @"yyyy-MM-dd";
+            NSCalendar *dayCalendar = booklandCalendar();
             NSMutableArray *rows = [NSMutableArray array];
             for (EKEvent *event in events) {
                 if (rows.count >= 160) break;
@@ -202,6 +229,8 @@ void nooklet_calendar_refresh(const char *calendarID, int monthOffset) {
                     @"end": @([event.endDate timeIntervalSince1970]),
                     @"calendar": event.calendar.title ?: @"Calendar",
                     @"day_key": [dayKeyFormat stringFromDate:event.startDate] ?: @"",
+                    @"day_keys": booklandEventDayKeys(event, dayCalendar, dayKeyFormat,
+                        monthStart, monthEnd),
                     @"all_day": @(event.isAllDay),
                     @"display_time": [(event.isAllDay ? allDayFormat : timedFormat)
                         stringFromDate:event.startDate] ?: @""
