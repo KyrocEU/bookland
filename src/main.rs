@@ -6811,32 +6811,21 @@ impl DeskApp {
                         let show_selectors = active.len() > 1 || active.first()
                             .is_some_and(|(index, _, _)| *index != self.selected_agent);
                         if show_selectors {
-                            ui.add_space(12.0);
-                        for (index, source, title) in active.into_iter().rev() {
-                            let (circle, response) = ui.allocate_exact_size(Vec2::splat(22.0),
-                                egui::Sense::click());
-                            let center = circle.center();
-                            let blue = Color32::from_rgb(74, 122, 241);
-                            ui.painter().circle_filled(center, 10.5, blue);
-                            if index == self.selected_agent {
-                                ui.painter().circle_stroke(center, 11.5,
-                                    Stroke::new(1.0, Color32::from_rgb(215, 231, 255)));
-                            }
-                            if source == "Codex" {
-                                paint_codex_logo(ui.painter(), center, 10.0, TEXT,
-                                    self.codex_logo.as_ref());
-                            } else {
-                                ui.painter().text(center, Align2::CENTER_CENTER,
-                                    source.chars().next().unwrap_or('•').to_string(),
-                                    FontId::proportional(11.0), TEXT);
-                            }
-                            response.widget_info(|| egui::WidgetInfo::labeled(
-                                egui::WidgetType::Button, true,
-                                format!("Select {}: {}", source, title)));
-                            if response.on_hover_text(source).clicked() {
-                                self.selected_agent = index;
-                            }
-                        }
+                            ui.add_space(8.0);
+                            ui.menu_button(
+                                RichText::new(format!("{} active ▾", active.len()))
+                                    .size(12.0).color(MUTED),
+                                |ui| {
+                                    ui.set_min_width(250.0);
+                                    for (index, source, title) in active {
+                                        if ui.selectable_label(index == self.selected_agent,
+                                            format!("{source} · {title}")).clicked() {
+                                            self.selected_agent = index;
+                                            ui.close();
+                                        }
+                                    }
+                                },
+                            ).response.on_hover_text("Choose a working task");
                         }
                     });
                 });
