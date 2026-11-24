@@ -1519,7 +1519,7 @@ fn read_media(source: &str) -> MediaSnapshot {
     let app = running_media_app(source);
     let mut snapshot = MediaSnapshot {
         app: app.clone(), title: "Nothing playing".into(),
-        artist: "Press Play to choose a song".into(),
+        artist: "Press Play for music".into(),
         position: 0.0, duration: 0.0, playing: false,
     };
     if let Some(app) = app {
@@ -2628,7 +2628,7 @@ impl DeskApp {
             todo_editing: false,
             todo_focus_pending: false,
             media_title: "Nothing playing".into(),
-            media_artist: "Press Play to choose a song".into(),
+            media_artist: "Press Play for music".into(),
             media_app: None,
             media_position: 0.0,
             media_duration: 0.0,
