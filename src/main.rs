@@ -2297,6 +2297,152 @@ fn paint_workspace_icon(
         }
     }
 }
+
+fn paint_settings_icon(p: &egui::Painter, c: egui::Pos2, name: &str, color: Color32) {
+    let s = Stroke::new(1.35, color);
+    let segment = |a: (f32, f32), b: (f32, f32)| {
+        p.line_segment([c + Vec2::new(a.0, a.1), c + Vec2::new(b.0, b.1)], s);
+    };
+    let box_at = |w: f32, h: f32, radius: f32| {
+        p.rect_stroke(egui::Rect::from_center_size(c, Vec2::new(w, h)),
+            radius, s, egui::StrokeKind::Inside);
+    };
+    match name {
+        "General" => {
+            p.circle_stroke(c, 3.0, s);
+            for n in 0..8 {
+                let angle = n as f32 * std::f32::consts::FRAC_PI_4;
+                let v = Vec2::angled(angle);
+                p.line_segment([c + v * 4.4, c + v * 6.1], s);
+            }
+        }
+        "Appearance" => {
+            p.circle_stroke(c, 5.6, s);
+            let mut half = vec![c];
+            for n in 0..=8 {
+                let angle = std::f32::consts::FRAC_PI_2
+                    + n as f32 * std::f32::consts::PI / 8.0;
+                half.push(c + Vec2::angled(angle) * 5.0);
+            }
+            p.add(egui::Shape::convex_polygon(half, color, Stroke::NONE));
+        }
+        "Displays" => {
+            box_at(12.0, 8.5, 1.3);
+            segment((0.0, 4.5), (0.0, 6.0));
+            segment((-3.0, 6.0), (3.0, 6.0));
+        }
+        "Behavior" => {
+            for (y, x) in [(-4.0, -2.5), (0.0, 3.0), (4.0, -1.0)] {
+                segment((-6.0, y), (6.0, y));
+                p.circle_filled(c + Vec2::new(x, y), 1.8, color);
+            }
+        }
+        "Pocket" | "Drop Area" => {
+            p.add(egui::Shape::line(vec![c + Vec2::new(-6.0, -2.5),
+                c + Vec2::new(-2.0, -2.5), c + Vec2::new(-0.5, -4.5),
+                c + Vec2::new(6.0, -4.5), c + Vec2::new(6.0, 5.0),
+                c + Vec2::new(-6.0, 5.0), c + Vec2::new(-6.0, -2.5)], s));
+            if name == "Drop Area" {
+                segment((0.0, -1.5), (0.0, 2.7));
+                segment((-2.0, 0.8), (0.0, 2.7));
+                segment((2.0, 0.8), (0.0, 2.7));
+            }
+        }
+        "Permissions" => {
+            p.add(egui::Shape::line(vec![
+                c + Vec2::new(0.0, -6.0), c + Vec2::new(5.0, -3.8),
+                c + Vec2::new(4.3, 2.0), c + Vec2::new(0.0, 6.0),
+                c + Vec2::new(-4.3, 2.0), c + Vec2::new(-5.0, -3.8),
+                c + Vec2::new(0.0, -6.0)], s));
+        }
+        "Nook" => {
+            p.add(egui::Shape::line(vec![c + Vec2::new(-6.0, -0.5),
+                c + Vec2::new(0.0, -5.5), c + Vec2::new(6.0, -0.5)], s));
+            segment((-4.5, -1.0), (-4.5, 5.5));
+            segment((-4.5, 5.5), (4.5, 5.5));
+            segment((4.5, 5.5), (4.5, -1.0));
+            segment((-1.5, 5.0), (-1.5, 1.0));
+            segment((-1.5, 1.0), (1.5, 1.0));
+        }
+        "Music" => {
+            segment((1.0, -5.5), (5.0, -6.0));
+            segment((1.0, -5.5), (1.0, 3.0));
+            segment((5.0, -6.0), (5.0, 1.5));
+            p.circle_filled(c + Vec2::new(-1.0, 3.5), 2.2, color);
+            p.circle_filled(c + Vec2::new(3.0, 2.0), 2.2, color);
+        }
+        "Tray" => {
+            segment((-6.0, 1.5), (-4.0, 5.0));
+            segment((-4.0, 5.0), (4.0, 5.0));
+            segment((4.0, 5.0), (6.0, 1.5));
+            segment((0.0, -6.0), (0.0, 1.5));
+            segment((-2.2, -0.5), (0.0, 1.7));
+            segment((2.2, -0.5), (0.0, 1.7));
+        }
+        "Clipboard" => {
+            box_at(10.0, 11.0, 1.5);
+            p.rect_filled(egui::Rect::from_center_size(c + Vec2::new(0.0, -5.2),
+                Vec2::new(4.0, 2.5)), 0.8, color);
+        }
+        "Prompter" => {
+            box_at(11.5, 10.5, 1.5);
+            for y in [-2.7, 0.0, 2.7] { segment((-3.4, y), (3.4, y)); }
+        }
+        "Calendar" => {
+            box_at(11.5, 10.5, 1.4);
+            segment((-5.2, -2.0), (5.2, -2.0));
+            for x in [-2.5, 1.5] {
+                for y in [0.5, 3.0] { p.circle_filled(c + Vec2::new(x, y), 0.7, color); }
+            }
+        }
+        "Agents" => {
+            p.add(egui::Shape::convex_polygon(vec![c + Vec2::new(0.0, -6.5),
+                c + Vec2::new(1.5, -1.5), c + Vec2::new(6.5, 0.0),
+                c + Vec2::new(1.5, 1.5), c + Vec2::new(0.0, 6.5),
+                c + Vec2::new(-1.5, 1.5), c + Vec2::new(-6.5, 0.0),
+                c + Vec2::new(-1.5, -1.5)], color, Stroke::NONE));
+        }
+        "Live Activities" => {
+            p.circle_stroke(c, 5.7, s);
+            p.circle_filled(c, 2.1, color);
+        }
+        "Lock Screen" => {
+            p.add(egui::Shape::line(vec![c + Vec2::new(-3.5, -1.0),
+                c + Vec2::new(-3.5, -3.2), c + Vec2::new(-2.0, -5.2),
+                c + Vec2::new(2.0, -5.2), c + Vec2::new(3.5, -3.2),
+                c + Vec2::new(3.5, -1.0)], s));
+            p.rect_stroke(egui::Rect::from_center_size(c + Vec2::new(0.0, 2.5),
+                Vec2::new(10.0, 7.0)), 1.2, s, egui::StrokeKind::Inside);
+        }
+        "Downloads" => {
+            segment((0.0, -6.0), (0.0, 2.5));
+            segment((-3.0, -0.5), (0.0, 2.5));
+            segment((3.0, -0.5), (0.0, 2.5));
+            segment((-5.5, 5.0), (5.5, 5.0));
+        }
+        "Messages (beta)" => {
+            box_at(11.5, 8.5, 2.0);
+            segment((-2.5, 4.0), (-4.5, 6.0));
+            segment((-4.5, 6.0), (-4.5, 3.0));
+        }
+        "Terminal" => {
+            segment((-5.0, -4.0), (-1.0, 0.0));
+            segment((-1.0, 0.0), (-5.0, 4.0));
+            segment((1.0, 4.0), (5.5, 4.0));
+        }
+        "Keyboard Shortcuts" => {
+            for (x, y) in [(-3.5, -3.5), (3.5, -3.5), (-3.5, 3.5), (3.5, 3.5)] {
+                p.circle_stroke(c + Vec2::new(x, y), 2.3, s);
+            }
+        }
+        "About" => {
+            p.circle_stroke(c, 5.7, s);
+            p.circle_filled(c + Vec2::new(0.0, -2.9), 0.9, color);
+            segment((0.0, -0.5), (0.0, 3.5));
+        }
+        _ => { p.circle_filled(c, 2.0, color); }
+    }
+}
 fn section_title(ui: &mut egui::Ui, text: &str) {
     label(ui, text, 11.0, MUTED);
     ui.add_space(7.0);
@@ -8066,44 +8212,27 @@ impl DeskApp {
             (
                 "SETTINGS",
                 vec![
-                    ("General", "⚙"),
-                    ("Appearance", "◐"),
-                    ("Displays", "▣"),
-                    ("Behavior", "◈"),
-                    ("Pocket", "▤"),
-                    ("Permissions", "✧"),
+                    "General", "Appearance", "Displays", "Behavior", "Pocket", "Permissions",
                 ],
             ),
             (
                 "WORKSPACES",
                 vec![
-                    ("Nook", "⌂"),
-                    ("Music", "♫"),
-                    ("Tray", "▣"),
-                    ("Clipboard", "▤"),
-                    ("Prompter", "▦"),
-                    ("Calendar", "▦"),
-                    ("Agents", "✦"),
+                    "Nook", "Music", "Tray", "Clipboard", "Prompter", "Calendar", "Agents",
                 ],
             ),
             (
                 "FEATURES",
                 vec![
-                    ("Live Activities", "◉"),
-                    ("Lock Screen", "▣"),
-                    ("Downloads", "↓"),
-                    ("Messages (beta)", "✉"),
-                    ("Terminal", ">_"),
-                    ("Drop Area", "▤"),
-                    ("Keyboard Shortcuts", "⌘"),
-                    ("About", "ⓘ"),
+                    "Live Activities", "Lock Screen", "Downloads", "Messages (beta)",
+                    "Terminal", "Drop Area", "Keyboard Shortcuts", "About",
                 ],
             ),
         ] {
             ui.add_space(10.0);
             label(ui, group, 10.0, MUTED);
             ui.add_space(5.0);
-            for (name, icon) in items {
+            for name in items {
                 let selected = self.settings_section == name;
                 let response = ui.add(egui::Button::new(
                     // Keep the name on the button for accessibility; paint it at a fixed
@@ -8121,8 +8250,7 @@ impl DeskApp {
                 ui.painter().rect_filled(badge, 5.0,
                     if selected { Color32::from_rgb(92, 133, 203) }
                     else { Color32::from_rgb(55, 68, 88) });
-                ui.painter().text(badge.center(), Align2::CENTER_CENTER,
-                    icon, FontId::proportional(11.0),
+                paint_settings_icon(ui.painter(), badge.center(), name,
                     Color32::from_rgb(243, 248, 255));
                 ui.painter().text(
                     egui::pos2(response.rect.left() + 32.0, response.rect.center().y),
