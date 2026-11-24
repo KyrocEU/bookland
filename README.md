@@ -2,11 +2,11 @@
 
 # Bookland
 
-[Website](https://kyroceu.github.io/bookland/) · [Source repository](https://github.com/KyrocEU/bookland)
+[Download Bookland 0.1.0](https://github.com/KyrocEU/bookland/releases/latest) · [Website](https://kyroceu.github.io/bookland/) · [Source repository](https://github.com/KyrocEU/bookland)
 
 **A macOS hover island for media, everyday tools, and Codex.** Bookland lives at the top edge of the screen as a small black notch. Hover or click to open an adaptive Liquid Glass panel that closes after the pointer leaves. Select the current workspace pill to collapse it immediately; right-click the closed strip and choose Open Nook to keep it open. Choose a workspace in the floating pill. The interface is in English and can display right-to-left music metadata, including Hebrew. Its premium open-book icon appears in the app and island menu, and on the idle strip.
 
-Bookland is free and open source, with no Bookland account, trial, or subscription. It is an independent project inspired by the hover island in NotchNook. It is an early source release, not a copy of NotchNook's code or a claim that every original feature is complete. Bookland is not affiliated with NotchNook or OpenAI.
+Bookland is free and open source, with no Bookland account, trial, or subscription. The current app is available as a downloadable 0.1.0 preview. It is an independent project inspired by the hover island in NotchNook. It is not a copy of NotchNook's code or a claim that every original feature is complete. Bookland is not affiliated with NotchNook or OpenAI.
 
 ## What the island does
 
@@ -45,6 +45,10 @@ System media reads use Apple's private MediaRemote framework, and system playbac
 Playing Next reads up to three tracks following the current song in an Apple Music playlist, only when opened and when shuffle is off. Apple Music does not expose manually queued songs through its scripting dictionary, so this view identifies itself as a playlist preview. Queue previews for other players are not available yet.
 
 Camera, microphone/speech, Calendar, system audio spectrum, and global shortcuts are opt-in. The spectrum requests macOS System Audio Recording permission only when enabled and the Music panel is open; it reads local frequency levels and does not save audio. AirPods status uses a periodic local Bluetooth report. Music settings has an opt-in Bluetooth button for immediate AirPods connection alerts; when access is unavailable, Bookland checks every 30 seconds. Clipboard history is kept in memory by default. If local clipboard persistence is enabled, text, Finder-file references, and up to eight bounded image payloads are saved under `~/Library/Application Support/Bookland/`; turning it off or clearing history removes the saved images. Items that macOS or supported password managers mark as confidential or temporary are skipped. Untagged sensitive text cannot always be recognized, so the clipboard privacy controls should be used with care.
+
+## Download and install
+
+Download the [latest Bookland release](https://github.com/KyrocEU/bookland/releases/latest), extract `Bookland-0.1.0-macOS-26.zip`, and move `Bookland.app` to Applications. Open it from Applications. Bookland is a menu-bar-style utility and appears at the top edge of the screen. The release is built for Apple Silicon and requires macOS 26 or later. It is ad hoc signed and not notarized; macOS may require **System Settings → Privacy & Security → Open Anyway** after the first launch attempt. The release page includes a SHA-256 checksum.
 
 ## Build and run
 
