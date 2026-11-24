@@ -2861,8 +2861,12 @@ impl DeskApp {
                     nooklet_morph_shell_set(0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
                 }
                 if self.animation_clock_enabled {
-                    nooklet_animation_clock_rate(if self.native_morph_animating
-                        && self.transition < 0.82 { 30 } else { 120 });
+                    // Core Animation interpolates the shell independently, but the
+                    // glass and controls are still painted by egui. Running those
+                    // at 30 Hz makes them visibly trail the 60 Hz shell, and
+                    // switching rates near the reveal adds a pacing discontinuity.
+                    // The display link is paused again as soon as the spring rests.
+                    nooklet_animation_clock_rate(60);
                 }
             }
         }
