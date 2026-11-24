@@ -3955,7 +3955,18 @@ impl DeskApp {
         let system_source = source == "System" || source == "Auto";
         if self.media_title == "Nothing playing" {
             if action == "playpause" {
-                self.open_media_player();
+                if self.media_actions_pending > 0 { return; }
+                let player = if source == "Spotify" { "Spotify" } else { "Music" };
+                let sender = self.media_action_tx.clone();
+                self.media_actions_pending += 1;
+                self.notify(format!("Opening {player}; playback will resume if a track is queued"));
+                std::thread::spawn(move || {
+                    let opened = Command::new("/usr/bin/open").args(["-a", player])
+                        .stderr(Stdio::null()).status()
+                        .is_ok_and(|status| status.success());
+                    if opened { let _ = media_script(player, "play"); }
+                    let _ = sender.send((opened, None));
+                });
             } else {
                 self.notify("Start a song before using playback controls");
             }
