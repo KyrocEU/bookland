@@ -1461,7 +1461,7 @@ fn read_media(source: &str) -> MediaSnapshot {
     let app = running_media_app(source);
     let mut snapshot = MediaSnapshot {
         app: app.clone(), title: "Nothing playing".into(),
-        artist: "Play media to see it here".into(),
+        artist: "Press Play to choose a song".into(),
         position: 0.0, duration: 0.0, playing: false,
     };
     if let Some(app) = app {
@@ -2570,7 +2570,7 @@ impl DeskApp {
             todo_editing: false,
             todo_focus_pending: false,
             media_title: "Nothing playing".into(),
-            media_artist: "Play media to see it here".into(),
+            media_artist: "Press Play to choose a song".into(),
             media_app: None,
             media_position: 0.0,
             media_duration: 0.0,
@@ -3870,9 +3870,35 @@ impl DeskApp {
         }
         set_system_volume(self.volume);
     }
+    fn open_media_player(&mut self) {
+        let player = if self.media_title != "Nothing playing" {
+            self.media_app.as_deref().unwrap_or("Music")
+        } else if self.prefs.media_source == "Spotify" {
+            "Spotify"
+        } else {
+            "Music"
+        };
+        let opened = Command::new("/usr/bin/open").args(["-a", player])
+            .stderr(Stdio::null()).status().is_ok_and(|status| status.success());
+        if opened {
+            if self.media_title == "Nothing playing" {
+                self.notify(format!("Choose a song in {player}; control it here once it starts"));
+            }
+        } else {
+            self.notify(format!("Could not open {player}"));
+        }
+    }
     fn media_action(&mut self, action: &str) {
         let source = self.prefs.media_source.clone();
         let system_source = source == "System" || source == "Auto";
+        if self.media_title == "Nothing playing" {
+            if action == "playpause" {
+                self.open_media_player();
+            } else {
+                self.notify("Start a song before using playback controls");
+            }
+            return;
+        }
         if self.media_app.is_none() && !system_source {
             self.notify("Play media to use playback controls");
             return;
@@ -4024,14 +4050,10 @@ impl DeskApp {
             }
             if self.prefs.extra_action == "Open app" {
                 if small_button(ui, "↗")
-                    .on_hover_text("Open playing app")
+                    .on_hover_text("Open media player")
                     .clicked()
                 {
-                    if let Some(app) = &self.media_app {
-                        let _ = Command::new("open").args(["-a", app]).spawn();
-                    } else {
-                        self.notify("No media app is playing");
-                    }
+                    self.open_media_player();
                 }
             } else if self.prefs.extra_action == "Shuffle" {
                 if small_button(ui, "Shuffle").on_hover_text("Toggle shuffle").clicked() {
