@@ -34,7 +34,7 @@ pub fn newly_finished<'a>(previous: &[AgentSnapshot], current: &'a [AgentSnapsho
     -> Option<&'a AgentSnapshot> {
     current.iter().find(|agent| agent.status == "Finished"
         && previous.iter().any(|old| old.path == agent.path
-            && old.source == agent.source && old.title == agent.title
+            && old.source == agent.source
             && old.status == "Working"))
 }
 
@@ -70,6 +70,21 @@ fn content_text(item: &Value) -> Option<String> {
         .filter_map(|part| part.get("text").and_then(Value::as_str))
         .find(|text| !text.trim().is_empty())
         .map(|text| shortened(text, 125))
+}
+
+fn response_user_title(payload: &Value) -> Option<String> {
+    if payload["type"] != "message" || payload["role"] != "user" { return None; }
+    let metadata = &payload["internal_chat_message_metadata_passthrough"];
+    if metadata["content_item_kinds"].as_array().is_some_and(|kinds|
+        !kinds.iter().any(|kind| kind == "user.text")) {
+        return None;
+    }
+    let text = payload["content"].as_array()?.iter()
+        .filter(|part| part["type"] == "input_text")
+        .filter_map(|part| part["text"].as_str())
+        .find(|text| !text.trim().is_empty())?;
+    if text.trim_start().starts_with("<codex_internal_context") { return None; }
+    Some(shortened(text, 125))
 }
 
 fn claude_text(content: &Value) -> Option<String> {
@@ -110,8 +125,16 @@ fn context_from_line(line: &[u8], title: &mut Option<String>, status: &mut Optio
     // Most records contain tool arguments or output. Only decode candidate lifecycle records.
     let has = |needle: &[u8]| line.windows(needle.len()).any(|window| window == needle);
     if !has(b"task_started") && !has(b"task_complete") && !has(b"turn_aborted")
-        && !has(b"UserMessage") && !has(b"AgentMessage") { return; }
+        && !has(b"UserMessage") && !has(b"AgentMessage")
+        && !has(b"\"role\":\"user\"") { return; }
     let Ok(record) = serde_json::from_slice::<Value>(line) else { return };
+    if record["type"] == "response_item" {
+        if let Some(text) = response_user_title(&record["payload"]) {
+            *title = Some(text);
+            *last_message = Some(None);
+        }
+        return;
+    }
     if record["type"] != "event_msg" { return; }
     let payload = &record["payload"];
     match payload["type"].as_str().unwrap_or("") {
@@ -136,29 +159,19 @@ fn context_from_line(line: &[u8], title: &mut Option<String>, status: &mut Optio
     }
 }
 
-fn first_codex_title(path: &Path, len: u64) -> Option<String> {
-    const MAX_PREFIX: u64 = 8 * 1024 * 1024;
-    let mut file = File::open(path).ok()?;
-    let mut bytes = vec![0; len.min(MAX_PREFIX) as usize];
-    file.read_exact(&mut bytes).ok()?;
-    for line in bytes.split(|byte| *byte == b'\n') {
-        let mut title = None;
-        context_from_line(line, &mut title, &mut None, &mut None);
-        if title.is_some() { return title; }
-    }
-    None
-}
-
 fn context_from_history(path: &Path, len: u64) -> Option<CodexContext> {
     const BLOCK: u64 = 256 * 1024;
     const MAX_MESSAGE_SCAN: u64 = 64 * 1024 * 1024;
+    const MAX_TITLE_SCAN: u64 = 2 * 1024 * 1024;
     let mut file = File::open(path).ok()?;
     let mut cursor = len;
     let mut carry = Vec::new();
     let mut status = None;
+    let mut title = None;
     let mut last_message = None;
-    while cursor > 0 && (status.is_none() ||
-        (last_message.is_none() && len - cursor < MAX_MESSAGE_SCAN)) {
+    while cursor > 0 && (status.is_none()
+        || (title.is_none() && len - cursor < MAX_TITLE_SCAN)
+        || (last_message.is_none() && len - cursor < MAX_MESSAGE_SCAN)) {
         let start = cursor.saturating_sub(BLOCK);
         file.seek(SeekFrom::Start(start)).ok()?;
         let mut bytes = vec![0; (cursor - start) as usize];
@@ -168,11 +181,13 @@ fn context_from_history(path: &Path, len: u64) -> Option<CodexContext> {
         carry = if start > 0 { lines.next().unwrap_or_default().to_vec() }
             else { Vec::new() };
         for line in lines.rev() {
-            if status.is_some() && last_message.is_some() { break; }
+            if status.is_some() && title.is_some() && last_message.is_some() { break; }
+            let mut found_title = None;
             let mut found_status = None;
             let mut found_message = None;
-            context_from_line(line, &mut None, &mut found_status, &mut found_message);
+            context_from_line(line, &mut found_title, &mut found_status, &mut found_message);
             if status.is_none() { status = found_status; }
+            if title.is_none() && len - start <= MAX_TITLE_SCAN { title = found_title; }
             if last_message.is_none() && len - start <= MAX_MESSAGE_SCAN {
                 last_message = found_message;
             }
@@ -181,7 +196,7 @@ fn context_from_history(path: &Path, len: u64) -> Option<CodexContext> {
     }
     Some(CodexContext {
         offset: len,
-        title: first_codex_title(path, len).unwrap_or_else(|| "Codex task".into()),
+        title: title.unwrap_or_else(|| "Codex task".into()),
         status: status.unwrap_or_else(|| "Idle".into()),
         last_message: last_message.flatten(),
     })
@@ -209,9 +224,7 @@ fn codex_context(path: &Path) -> Option<CodexContext> {
                     let mut status = None;
                     let mut last_message = None;
                     context_from_line(line, &mut title, &mut status, &mut last_message);
-                    if previous.title == "Codex task" {
-                        if let Some(title) = title { previous.title = title; }
-                    }
+                    if let Some(title) = title { previous.title = title; }
                     if let Some(status) = status { previous.status = status; }
                     if let Some(last_message) = last_message {
                         previous.last_message = last_message;
@@ -392,6 +405,14 @@ fn codex_thread_names(codex_home: &Path) -> HashMap<PathBuf, String> {
     }).collect()
 }
 
+fn apply_thread_names(agents: &mut [AgentSnapshot], names: &HashMap<PathBuf, String>) {
+    for agent in agents {
+        if agent.title == "Codex task" {
+            if let Some(name) = names.get(&agent.path) { agent.title = name.clone(); }
+        }
+    }
+}
+
 fn craft_projects(root: &Path) -> Vec<AgentSnapshot> {
     let Ok(entries) = fs::read_dir(root) else { return Vec::new() };
     let mut snapshots = Vec::new();
@@ -473,9 +494,7 @@ pub fn scan_local(home: &Path) -> Vec<AgentSnapshot> {
         .collect::<Vec<_>>();
     let mut names = codex_thread_names(&desktop_codex);
     names.extend(codex_thread_names(&island_codex));
-    for agent in &mut agents {
-        if let Some(name) = names.get(&agent.path) { agent.title = name.clone(); }
-    }
+    apply_thread_names(&mut agents, &names);
     let claude_config = std::env::var_os("CLAUDE_CONFIG_DIR")
         .map(PathBuf::from).unwrap_or_else(|| home.join(".claude"));
     let mut claude_files = Vec::new();
@@ -550,7 +569,7 @@ mod tests {
         let mut other_task = working.clone();
         other_task.title = "Another task".into();
         other_task.status = "Finished".into();
-        assert!(newly_finished(&[working.clone()], &[other_task]).is_none());
+        assert!(newly_finished(&[working.clone()], &[other_task]).is_some());
         working.source = "Claude Code".into();
         assert!(newly_finished(&[working], &[AgentSnapshot {
             source: "Codex".into(), status: "Finished".into(),
@@ -573,7 +592,7 @@ mod tests {
             "{\"type\":\"event_msg\",\"payload\":{\"type\":\"item_completed\",\"item\":{\"type\":\"UserMessage\",\"content\":[{\"text\":\"Change only hover\"}]}}}\n"
         )).unwrap();
         let result = parse_codex(&path).unwrap();
-        assert_eq!(result.title, "Build glass");
+        assert_eq!(result.title, "Change only hover");
         assert_eq!(result.status, "Working");
         assert!(result.events.is_empty());
         let _ = fs::remove_dir_all(dir);
@@ -634,11 +653,67 @@ mod tests {
         writeln!(file, "{}", r#"{"type":"event_msg","payload":{"type":"item_completed","item":{"type":"UserMessage","content":[{"text":"Next task"}]}}}"#).unwrap();
         file.flush().unwrap();
         assert!(parse_codex(&path).unwrap().last_message.is_none());
-        assert_eq!(parse_codex(&path).unwrap().title, "Build the island");
+        assert_eq!(parse_codex(&path).unwrap().title, "Next task");
         writeln!(file, "{}", r#"{"type":"event_msg","payload":{"type":"task_complete"}}"#).unwrap();
         drop(file);
         assert_eq!(parse_codex(&path).unwrap().status, "Finished");
         let _ = fs::remove_dir_all(dir);
+    }
+    #[test]
+    fn codex_history_uses_the_latest_turn_title_on_first_scan() {
+        let dir = std::env::temp_dir().join(format!(
+            "bookland-codex-latest-title-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("session.jsonl");
+        fs::write(&path, concat!(
+            "{\"type\":\"event_msg\",\"payload\":{\"type\":\"item_completed\",\"item\":{\"type\":\"UserMessage\",\"content\":[{\"text\":\"First task\"}]}}}\n",
+            "{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_complete\"}}\n",
+            "{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_started\"}}\n",
+            "{\"type\":\"event_msg\",\"payload\":{\"type\":\"item_completed\",\"item\":{\"type\":\"UserMessage\",\"content\":[{\"text\":\"Current task\"}]}}}\n"
+        )).unwrap();
+        let result = parse_codex(&path).unwrap();
+        assert_eq!(result.title, "Current task");
+        assert_eq!(result.status, "Working");
+        let _ = fs::remove_dir_all(dir);
+    }
+    #[test]
+    fn codex_response_item_uses_human_prompt_and_skips_internal_continuations() {
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("session.jsonl");
+        fs::write(&path, concat!(
+            "{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_started\"}}\n",
+            "{\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Fix the hover animation\"}]}}\n",
+            "{\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"<codex_internal_context source=goal>Keep working\"}],\"internal_chat_message_metadata_passthrough\":{\"content_item_kinds\":[\"goal.internal_context\"]}}}\n"
+        )).unwrap();
+        assert_eq!(parse_codex(&path).unwrap().title, "Fix the hover animation");
+        let mut file = fs::OpenOptions::new().append(true).open(&path).unwrap();
+        writeln!(file, "{}", r#"{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Show Codex progress"}]}}"#).unwrap();
+        file.flush().unwrap();
+        assert_eq!(parse_codex(&path).unwrap().title, "Show Codex progress");
+        let project_context = serde_json::json!({"type": "message", "role": "user",
+            "content": [{"type": "input_text", "text": "Private project instructions"}],
+            "internal_chat_message_metadata_passthrough": {
+                "content_item_kinds": ["agents_md.instructions"]}});
+        assert!(response_user_title(&project_context).is_none());
+        let human = serde_json::json!({"type": "message", "role": "user",
+            "content": [{"type": "input_text", "text": "Keep improving Bookland"}],
+            "internal_chat_message_metadata_passthrough": {
+                "content_item_kinds": ["user.text"]}});
+        assert_eq!(response_user_title(&human).as_deref(),
+            Some("Keep improving Bookland"));
+    }
+    #[test]
+    fn saved_thread_name_does_not_replace_the_live_turn_title() {
+        let path = PathBuf::from("/tmp/bookland-codex-turn.jsonl");
+        let mut agents = vec![AgentSnapshot { title: "Current task".into(),
+            path: path.clone(), ..Default::default() }];
+        let names = HashMap::from([(path, "Old thread title".into())]);
+        apply_thread_names(&mut agents, &names);
+        assert_eq!(agents[0].title, "Current task");
+        agents[0].title = "Codex task".into();
+        apply_thread_names(&mut agents, &names);
+        assert_eq!(agents[0].title, "Old thread title");
     }
     #[test]
     fn external_feed_is_bounded_and_local() {
