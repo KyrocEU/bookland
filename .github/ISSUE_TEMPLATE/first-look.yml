@@ -1,0 +1,46 @@
+name: First look feedback
+description: Tell us what worked, what felt slow, and what you want next.
+title: "First look: "
+labels: [feedback]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying the Bookland preview. Please avoid posting private calendar entries, account names, API keys, or unredacted logs.
+  - type: input
+    id: environment
+    attributes:
+      label: Mac and macOS
+      description: For example, MacBook Pro M3 on macOS 26.1.
+      placeholder: Mac model and macOS version
+    validations:
+      required: true
+  - type: dropdown
+    id: workspace
+    attributes:
+      label: What did you try?
+      options:
+        - Hover and closing
+        - Music
+        - Calendar
+        - Codex
+        - Tray or Pocket
+        - Nook or Focus
+        - Settings
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: experience
+    attributes:
+      label: What happened?
+      description: Describe one concrete action and what Bookland did.
+    validations:
+      required: true
+  - type: textarea
+    id: improve
+    attributes:
+      label: What would make this useful in your day?
+      description: One change or missing behavior is enough.
+    validations:
+      required: false

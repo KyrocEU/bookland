@@ -1,0 +1,52 @@
+name: Bug report
+description: Report a Bookland behavior that can be reproduced.
+title: "Bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please redact private data from screenshots and logs. If the issue involves music, include the player and browser. If it involves Calendar, name the account type, not the account address.
+  - type: input
+    id: version
+    attributes:
+      label: Bookland version
+      placeholder: 0.1.4
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Mac and macOS
+      placeholder: Mac model and macOS version
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Bookland...
+        2. Hover or click...
+        3. Observe...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: input
+    id: player
+    attributes:
+      label: Player or browser, if relevant
+      placeholder: Chrome with YouTube, Apple Music, Spotify, etc.
+    validations:
+      required: false
