@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="2560" height="1440" viewBox="0 0 2560 1440" role="img" aria-label="Bookland — A living island for your Mac">
+  <defs>
+    <linearGradient id="canvas" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#050A13"/>
+      <stop offset="0.56" stop-color="#102035"/>
+      <stop offset="1" stop-color="#050A13"/>
+    </linearGradient>
+    <radialGradient id="blueGlow">
+      <stop offset="0" stop-color="#5B95E9" stop-opacity="0.34"/>
+      <stop offset="1" stop-color="#5B95E9" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="iceGlow">
+      <stop offset="0" stop-color="#D7F3FF" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#D7F3FF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="islandGlass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#EAF6FF" stop-opacity="0.15"/>
+      <stop offset="0.45" stop-color="#8CB9EE" stop-opacity="0.07"/>
+      <stop offset="1" stop-color="#D7F3FF" stop-opacity="0.03"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#D7F3FF" stop-opacity="0.04"/>
+      <stop offset="0.52" stop-color="#D7F3FF" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#D7F3FF" stop-opacity="0.03"/>
+    </linearGradient>
+  </defs>
+  <rect width="2560" height="1440" fill="url(#canvas)"/>
+  <ellipse cx="1840" cy="580" rx="850" ry="660" fill="url(#blueGlow)"/>
+  <ellipse cx="570" cy="950" rx="770" ry="550" fill="url(#iceGlow)"/>
+  <path d="M0 1058 C530 890 1030 1000 1530 840 S2210 600 2560 700" fill="none" stroke="#79ABEB" stroke-opacity="0.09" stroke-width="2"/>
+  <path d="M0 1090 C530 922 1030 1032 1530 872 S2210 632 2560 732" fill="none" stroke="#D7F3FF" stroke-opacity="0.05" stroke-width="2"/>
+  <rect x="480" y="505" width="1600" height="430" rx="215" fill="url(#islandGlass)" stroke="url(#edge)" stroke-width="2"/>
+  <rect x="492" y="517" width="1576" height="406" rx="203" fill="none" stroke="#D7F3FF" stroke-opacity="0.07" stroke-width="1"/>
+  <image x="610" y="585" width="270" height="270" xlink:href="bookland-icon-premium.png"/>
+  <text x="953" y="690" fill="#F4F8FF" font-family="-apple-system, BlinkMacSystemFont, Helvetica Neue, Arial, sans-serif" font-size="118" font-weight="700" letter-spacing="-5">Bookland</text>
+  <text x="958" y="758" fill="#D7F3FF" font-family="-apple-system, BlinkMacSystemFont, Helvetica Neue, Arial, sans-serif" font-size="42" font-weight="400">A living island for your Mac.</text>
+  <circle cx="969" cy="808" r="6" fill="#83DBF2"/>
+  <text x="992" y="819" fill="#A9C0DC" font-family="-apple-system, BlinkMacSystemFont, Helvetica Neue, Arial, sans-serif" font-size="25" font-weight="600" letter-spacing="3">FREE · OPEN SOURCE · macOS</text>
+</svg>

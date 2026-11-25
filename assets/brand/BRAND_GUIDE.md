@@ -31,9 +31,10 @@ Use the macOS system typeface for app UI. Use a clean sans-serif wordmark in mar
 - `bookland-icon-premium.png`: app icon and press kit image.
 - `bookland-social-avatar.png`: circular social avatar with a larger book mark; used on Instagram and TikTok.
 - `bookland-reddit-banner.jpg`: 1000×300 Reddit profile banner, 40.5 KB.
+- `bookland-youtube-banner.svg` and `bookland-youtube-banner.png`: editable and ready-to-upload 2560×1440 YouTube banner. The icon and text sit inside the central device-safe area.
 - [Public Bookland website](https://kyroceu.github.io/bookland/): product overview and GitHub entry point.
 
-Social profiles: [Instagram](https://www.instagram.com/bookland_pro/), [TikTok](https://www.tiktok.com/@bookland.pro), and [Reddit](https://www.reddit.com/user/BookLandPro/).
+Social profiles: [Instagram](https://www.instagram.com/bookland_pro/), [TikTok](https://www.tiktok.com/@bookland.pro), [YouTube](https://www.youtube.com/@booklandmac), [X](https://x.com/booklandmac), and [Reddit](https://www.reddit.com/user/BookLandPro/).
 
 Show real Bookland screenshots for feature demonstrations. The launch hero is a brand composition, not a screenshot of the app. Describe Codex approval controls as available for Bookland-connected turns; ordinary Codex desktop turns are not automatically mirrored into the island.
 
