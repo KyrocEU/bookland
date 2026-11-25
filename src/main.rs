@@ -4283,6 +4283,13 @@ impl DeskApp {
             self.notify("This player did not provide a timeline");
         }
     }
+    fn gesture_media(&mut self, backward: bool) {
+        if is_browser_media_app(self.media_app.as_deref()) {
+            self.seek_browser_media(backward);
+        } else {
+            self.skip_media(backward);
+        }
+    }
     fn handle_media_seek_slider(&mut self, ui: &egui::Ui,
                                 slider: &egui::Response, target: f32) {
         if slider.drag_stopped() || (slider.changed() && !slider.dragged()) {
@@ -8611,6 +8618,8 @@ impl DeskApp {
                             ui.checkbox(&mut self.prefs.gesture_invert_media,
                                 "Invert media gesture actions");
                         });
+                        label(ui, "Browser media seeks 15 seconds; music players change tracks.",
+                            11.0, MUTED);
                     });
                     label(ui, "Clicking the island keeps it open until you close it.", 12.0, MUTED);
                 });
@@ -9734,8 +9743,8 @@ impl eframe::App for DeskApp {
                         self.opened_by_hover = false;
                         self.hover_blocked_until_exit = true;
                     }
-                    IslandGestureAction::Previous => self.skip_media(true),
-                    IslandGestureAction::Next => self.skip_media(false),
+                    IslandGestureAction::Previous => self.gesture_media(true),
+                    IslandGestureAction::Next => self.gesture_media(false),
                     _ => {}
                 }
             }
