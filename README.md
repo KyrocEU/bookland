@@ -8,6 +8,8 @@
 
 Bookland is free and open source, with no Bookland account, trial, or subscription. The current app is available as a downloadable 0.1.0 preview. It is an independent project inspired by the hover island in NotchNook. It is not a copy of NotchNook's code or a claim that every original feature is complete. Bookland is not affiliated with NotchNook or OpenAI.
 
+Only one normal Bookland instance runs per Mac user. If another copy is launched from a different folder, it exits and leaves the existing island in place. Screenshot and preview modes remain independent for development.
+
 ## What the island does
 
 | Area | What is available |

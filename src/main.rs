@@ -27,6 +27,7 @@ mod music_queue;
 mod pocket;
 mod pipelines;
 mod shake;
+mod single_instance;
 mod prompter;
 use lyrics::Line as LyricLine;
 mod video;
@@ -9865,6 +9866,22 @@ fn main() -> eframe::Result {
         .find(|pair| pair[0] == "--screenshot")
         .map(|pair| PathBuf::from(&pair[1]));
     let shot_mode = screenshot.is_some();
+    #[cfg(target_os = "macos")]
+    let _single_instance = if preview_mode || shot_mode {
+        None
+    } else {
+        match single_instance::acquire() {
+            Ok(Some(lock)) => Some(lock),
+            Ok(None) => {
+                eprintln!("Bookland is already running; keeping the existing island.");
+                return Ok(());
+            }
+            Err(error) => {
+                eprintln!("Bookland could not acquire its instance lock: {error}");
+                return Ok(());
+            }
+        }
+    };
     let screenshot_workspace = args.windows(2)
         .find(|pair| pair[0] == "--screenshot-workspace")
         .and_then(|pair| Workspace::DEFAULT.into_iter()
