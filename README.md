@@ -2,11 +2,13 @@
 
 # Bookland
 
-[Download Bookland 0.1.3](https://github.com/KyrocEU/bookland/releases/latest) · [Website](https://kyroceu.github.io/bookland/) · [Source repository](https://github.com/KyrocEU/bookland)
+[Download Bookland 0.1.3](https://github.com/KyrocEU/bookland/releases/latest) · [Watch the real Mac demo](https://kyroceu.github.io/bookland/#films) · [Website](https://kyroceu.github.io/bookland/) · [Help test Bookland](https://github.com/KyrocEU/bookland/issues/1)
 
 **A macOS hover island for media, everyday tools, and Codex.** Bookland lives at the top edge of the screen as a small black notch. Hover or click to open an adaptive Liquid Glass panel that closes after the pointer leaves. Select the current workspace pill to collapse it immediately; right-click the closed strip and choose Open Nook to keep it open. Choose a workspace in the floating pill. The interface is in English and can display right-to-left music metadata, including Hebrew. Its premium open-book icon appears in the app and island menu, and on the idle strip.
 
 Bookland is free and open source, with no Bookland account, trial, or subscription. The current app is available as a downloadable 0.1.3 preview. It is an independent project inspired by the hover island in NotchNook. It is not a copy of NotchNook's code or a claim that every original feature is complete. Bookland is not affiliated with NotchNook or OpenAI.
+
+The [22-second demo](https://kyroceu.github.io/bookland/#films) uses real Mac screen captures to show Bookland opening at the camera, moving a YouTube video back 15 seconds, and closing again. If you try the preview, please report whether hover opens promptly, closes after you leave, and controls your player correctly in the [tester feedback thread](https://github.com/KyrocEU/bookland/issues/1). Include your Mac model, macOS version, and player or browser so a failure can be reproduced.
 
 Only one normal Bookland instance runs per Mac user. If another copy is launched from a different folder, it exits and leaves the existing island in place. Screenshot and preview modes remain independent for development.
 
