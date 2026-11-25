@@ -22,9 +22,9 @@ End with one ask: **Comment BOOKLAND for the project link.** Reply manually unti
 
 ## Community testing
 
-r/macapps currently limits a developer to one app post per 30 days and routes newer accounts to The App Pile. Do not repost a removed submission or farm karma; its [November 2026 moderation update](https://www.reddit.com/r/macapps/comments/1xo5ky1/rmacapps_moderation_update_phase_4_clearer_rules/) explicitly warns against both. The existing Bookland App Pile entry is the current r/macapps presence. r/alphaandbetausers is a better candidate for a *single, specific* tester request, provided the account can submit and the post stays visible. Check the community rules in the signed-in UI before posting.
+r/macapps currently limits a developer to one app post per 30 days and routes newer accounts to The App Pile. Its [November 2026 moderation update](https://www.reddit.com/r/macapps/comments/1xo5ky1/rmacapps_moderation_update_phase_4_clearer_rules/) warns against repeat submissions and karma farming. The Bookland App Pile comment was removed by moderation. An earlier r/alphaandbetausers tester post and r/SideProject submissions were also removed by Reddit filters. These are not live community distribution. Do not submit another Bookland pitch to those communities while the account is new; use the public project page and GitHub first-look issue for tester feedback, and participate in relevant discussions only where there is a useful answer to give.
 
-### Draft for a tester request
+### Reusable tester copy for a permitted opportunity
 
 **Title:** [macOS, Beta] Looking for Apple Silicon testers for Bookland's hover island
 
