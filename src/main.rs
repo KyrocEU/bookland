@@ -8281,7 +8281,9 @@ impl DeskApp {
             } else { false };
             if !completion_clicked { self.choose_hover_workspace(); }
             self.expanded = true;
-            self.opened_by_hover = true;
+            // A deliberate click should keep the island open for interaction.
+            // Only a hover-opened panel follows the pointer-leave timer.
+            self.opened_by_hover = false;
             self.hover_blocked_until_exit = false;
             self.last_hovered = Instant::now();
             self.hover_opened_at = self.last_hovered;
