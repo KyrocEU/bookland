@@ -2547,7 +2547,8 @@ impl DeskApp {
             if self.workspace == Workspace::Agents {
                 return if self.agent_chat_open {
                     (585.0, if self.agent_chat_desktop
-                        && self.desktop_codex_question.is_some() { 370.0 } else { 285.0 })
+                        && self.desktop_codex_question.is_some() { 370.0 }
+                        else if self.agent_chat_desktop { 285.0 } else { 300.0 })
                 } else { (585.0, 230.0) };
             }
             if self.workspace == Workspace::Music {
@@ -7119,6 +7120,26 @@ impl DeskApp {
                                 },
                             ).response.on_hover_text("Choose a working task");
                         }
+                        if let Some(thread_id) = agent.as_ref()
+                            .filter(|item| item.source == "Codex")
+                            .and_then(|item| desktop_codex_thread_id(&item.path)) {
+                            let can_switch = self.desktop_codex_rx.is_none()
+                                || self.desktop_codex_thread_id.as_ref() == Some(&thread_id);
+                            if ui.add_enabled(can_switch, egui::Button::new("This turn")
+                                .corner_radius(12))
+                                .on_hover_text("Reply to the selected Codex task in Bookland")
+                                .clicked() {
+                                self.desktop_codex_thread_id = Some(thread_id);
+                                self.agent_chat_desktop = true;
+                                self.agent_chat_open = true;
+                            }
+                        }
+                        if ui.add(egui::Button::new("Bookland chat").corner_radius(12))
+                            .on_hover_text("Open Bookland's connected Codex chat")
+                            .clicked() {
+                            self.agent_chat_desktop = false;
+                            self.agent_chat_open = true;
+                        }
                     });
                 });
                 ui.add_space(4.0);
@@ -7352,7 +7373,7 @@ impl DeskApp {
                         ui.set_min_height(120.0);
                         ui.with_layout(egui::Layout::top_down(Align::Min), |ui| {
                             egui::ScrollArea::vertical().id_salt("bookland_compact_codex_chat")
-                            .max_height(120.0).stick_to_bottom(true).show(ui, |ui| {
+                            .max_height(135.0).stick_to_bottom(true).show(ui, |ui| {
                                 if self.codex_messages.is_empty() {
                                     ui.add_space(42.0);
                                     ui.vertical_centered(|ui| label(ui,
