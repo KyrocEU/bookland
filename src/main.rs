@@ -6510,7 +6510,8 @@ impl DeskApp {
                                             RichText::new(if browser { "−15" } else { "◀◀" }).size(18.0).color(Color32::WHITE))
                                             .frame(false).min_size(Vec2::new(30.0, 27.0)))
                                             .on_hover_text(if browser { "Back 15 seconds" } else { "Previous track" }).clicked() {
-                                            self.skip_media(true);
+                                            if browser { self.seek_browser_media(true); }
+                                            else { self.skip_media(true); }
                                         }
                                         if ui.add(egui::Button::new(
                                             RichText::new(if self.media_playing { "Ⅱ" } else { "▶" })
@@ -6523,7 +6524,8 @@ impl DeskApp {
                                             RichText::new(if browser { "+15" } else { "▶▶" }).size(18.0).color(Color32::WHITE))
                                             .frame(false).min_size(Vec2::new(30.0, 27.0)))
                                             .on_hover_text(if browser { "Forward 15 seconds" } else { "Next track" }).clicked() {
-                                            self.skip_media(false);
+                                            if browser { self.seek_browser_media(false); }
+                                            else { self.skip_media(false); }
                                         }
                                     });
                                 });
