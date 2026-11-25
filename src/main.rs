@@ -4131,12 +4131,12 @@ impl DeskApp {
             self.notify(format!("Could not open {player}"));
         }
     }
-    fn media_action(&mut self, action: &str) {
+    fn media_action(&mut self, action: &str) -> bool {
         let source = self.prefs.media_source.clone();
         let system_source = source == "System" || source == "Auto";
         if self.media_title == "Nothing playing" {
             if action == "playpause" {
-                if self.media_actions_pending > 0 { return; }
+                if self.media_actions_pending > 0 { return false; }
                 let player = if source == "Spotify" { "Spotify" } else { "Music" };
                 let sender = self.media_action_tx.clone();
                 self.media_actions_pending += 1;
@@ -4151,15 +4151,15 @@ impl DeskApp {
             } else {
                 self.notify("Start a song before using playback controls");
             }
-            return;
+            return action == "playpause";
         }
         if self.media_app.is_none() && !system_source {
             self.notify("Play media to use playback controls");
-            return;
+            return false;
         }
         if self.media_actions_pending > 0 {
             self.notify("Playback is still responding");
-            return;
+            return false;
         }
         let previous_playing = (action == "playpause").then_some(self.media_playing);
         let action = if action == "playpause" {
@@ -4189,6 +4189,7 @@ impl DeskApp {
             } else { false };
             let _ = sender.send((success, previous_playing));
         });
+        true
     }
     fn skip_media(&mut self, backward: bool) {
         self.media_action(media_skip_command(backward));
@@ -4197,7 +4198,10 @@ impl DeskApp {
         let position = self.media_position
             + if self.media_playing { self.last_media_poll.elapsed().as_secs_f32() } else { 0.0 };
         if let Some(target) = browser_skip_target(position, self.media_duration, backward) {
-            self.media_action(&format!("set player position to {target}"));
+            if self.media_action(&format!("set player position to {target}")) {
+                self.media_position = target;
+                self.last_media_poll = Instant::now();
+            }
         } else {
             self.notify("This player did not provide a timeline");
         }
@@ -6229,7 +6233,7 @@ impl DeskApp {
                     let browser = is_browser_media_app(self.media_app.as_deref());
                     if ui.add(egui::Button::new(RichText::new(if browser { "−15" } else { "◀◀" }).size(17.0)).frame(false))
                         .on_hover_text(if browser { "Back 15 seconds" } else { "Previous track" }).clicked() {
-                        self.skip_media(true);
+                        if browser { self.seek_browser_media(true); } else { self.skip_media(true); }
                     }
                     if ui.add(egui::Button::new(RichText::new(
                         if self.media_playing { "Ⅱ" } else { "▶" }).size(17.0))
@@ -6237,7 +6241,7 @@ impl DeskApp {
                         .corner_radius(20).min_size(Vec2::splat(35.0))).clicked() { self.media_action("playpause"); }
                     if ui.add(egui::Button::new(RichText::new(if browser { "+15" } else { "▶▶" }).size(17.0)).frame(false))
                         .on_hover_text(if browser { "Forward 15 seconds" } else { "Next track" }).clicked() {
-                        self.skip_media(false);
+                        if browser { self.seek_browser_media(false); } else { self.skip_media(false); }
                     }
                 });
                 ui.add_space(11.0);
