@@ -26,13 +26,15 @@ r/macapps currently limits a developer to one app post per 30 days and routes ne
 
 ### Draft for a tester request
 
-**Title:** Looking for Apple Silicon Mac testers for a small open-source hover island
+**Title:** [macOS, Beta] Looking for Apple Silicon testers for Bookland's hover island
 
-I built Bookland because I kept switching to YouTube just to replay 15 seconds of a video. It lives beside the MacBook camera, opens on hover, puts media controls there, and folds away when the pointer leaves.
+I'm building Bookland because I kept switching to YouTube just to replay 15 seconds. It sits beside the MacBook camera: hover to open media controls, tap rewind, then move away and it folds closed.
 
-The [22-second real Mac demo](https://kyroceu.github.io/bookland/#films) shows a hover, a `−15` press, the timestamp changing from 00:45 to 00:30, and the close. The app is free and [open source on GitHub](https://github.com/KyrocEU/bookland) under MIT. This is a preview for Apple Silicon on macOS 26 or later. It is self-signed and not Apple-notarized, so macOS may ask you to use Open Anyway after the first launch attempt.
+The current preview is free and MIT-licensed. It runs on Apple Silicon with macOS 26 or later. The build is locally signed and not Apple-notarized, so macOS may require Open Anyway on first launch.
 
-I would love two checks from someone with a compatible Mac: does the island open and close promptly on your machine, and does the 15-second seek work in your browser or player? If either fails, the Mac model, macOS version, and player name would help me fix it. You can reply here or use the [first-look form](https://github.com/KyrocEU/bookland/issues/new?template=first-look.yml).
+The [download and source](https://github.com/KyrocEU/bookland) includes a 22-second real Mac demo showing a hover, a 15-second rewind (00:45 to 00:30), and the close.
+
+Could someone with a compatible Mac check two things for me? Does the island open and close promptly, and does the 15-second seek work with your browser or player? If something fails, your Mac model, macOS version, and player name would help me reproduce it. Honest first-use feedback is welcome too.
 
 ## Review loop
 
