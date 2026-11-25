@@ -31,3 +31,9 @@ https://github.com/ungive/mediaremote-adapter (commit
 `65714990277cb4d0415ebaf7fff6be3229362b28`). Its full license is in
 `vendor/mediaremote-adapter/LICENSE` and bundled as
 `Contents/Resources/MediaRemoteAdapter-LICENSE`.
+
+The optional `marketing/creatorops` video worker depends on Remotion, React,
+and other packages listed in its lockfile. Their respective package licenses
+apply. Its recorded Bookland Music demonstration includes third-party player
+UI and album artwork as part of the real screen capture. Bookland does not
+claim or grant rights to that third-party material.

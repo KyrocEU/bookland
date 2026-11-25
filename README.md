@@ -10,6 +10,8 @@ Bookland is free and open source, with no Bookland account, trial, or subscripti
 
 The [22-second demo](https://kyroceu.github.io/bookland/#films) uses real Mac screen captures to show Bookland opening at the camera, moving a YouTube video back 15 seconds, and closing again. If you try the preview, please report whether hover opens promptly, closes after you leave, and controls your player correctly in the [tester feedback thread](https://github.com/KyrocEU/bookland/issues/1). Include your Mac model, macOS version, and player or browser so a failure can be reproduced.
 
+The [CreatorOps render worker](marketing/creatorops/README.md) contains the source and recorded footage for a reproducible 22-second Music demo. It can render a vertical video from a reviewed script. Its n8n workflow still requires human approval, and automatic social publishing is not enabled.
+
 Only one normal Bookland instance runs per Mac user. If another copy is launched from a different folder, it exits and leaves the existing island in place. Screenshot and preview modes remain independent for development.
 
 ## What the island does
