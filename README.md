@@ -4,6 +4,8 @@
 
 [Download Bookland 0.1.4](https://github.com/KyrocEU/bookland/releases/latest) · [Watch Bookland in motion](https://kyroceu.github.io/bookland/#films) · [Website](https://kyroceu.github.io/bookland/) · [Discuss and review Bookland](https://github.com/KyrocEU/bookland/discussions/2)
 
+Follow the build: [X](https://x.com/booklandmac) · [Instagram](https://www.instagram.com/bookland_pro/) · [TikTok](https://www.tiktok.com/@bookland.pro). If you test the preview, the most useful contribution is a specific bug report or first impression in [GitHub Discussions](https://github.com/KyrocEU/bookland/discussions/2).
+
 **A macOS hover island for media, everyday tools, and Codex.** Bookland lives at the top edge of the screen as a slim island beside the camera. Hover or click to open an adaptive Liquid Glass panel that closes after the pointer leaves. Select the current workspace pill to collapse it immediately; right-click the closed strip and choose Open Nook to keep it open. Choose a workspace in the floating pill. The interface is in English and can display right-to-left music metadata, including Hebrew. Its premium open-book icon appears in the app and island menu, and on the idle strip.
 
 Bookland is free and open source, with no Bookland account, trial, or subscription. The current app is available as a downloadable 0.1.4 preview. It is an independent project inspired by the hover island in NotchNook. It is not a copy of NotchNook's code or a claim that every original feature is complete. Bookland is not affiliated with NotchNook or OpenAI.
