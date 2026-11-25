@@ -55,6 +55,12 @@ copyButton?.addEventListener('click', async () => {
 const captureLightbox = document.querySelector('.capture-lightbox');
 const captureLightboxImage = captureLightbox?.querySelector('img');
 const captureLightboxTitle = captureLightbox?.querySelector('h2');
+const captureLightboxViewport = captureLightbox?.querySelector('.capture-lightbox-viewport');
+captureLightboxImage?.addEventListener('load', () => {
+  if (!captureLightboxViewport) return;
+  captureLightboxViewport.scrollLeft = (captureLightboxViewport.scrollWidth - captureLightboxViewport.clientWidth) / 2;
+  captureLightboxViewport.scrollTop = 0;
+});
 for (const button of document.querySelectorAll('.capture-zoom')) {
   button.addEventListener('click', () => {
     const image = button.querySelector('img');
