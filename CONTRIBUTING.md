@@ -6,7 +6,7 @@ Bookland is a free, open-source macOS preview. The most useful contribution righ
 
 1. Download the [latest release](https://github.com/KyrocEU/bookland/releases/latest) and read the install notes in the [README](README.md#download-and-install).
 2. Hover near the camera cutout, open Music or another workspace, then move the pointer away. Try the action you would use in your normal workflow.
-3. Tell us what happened in the [first-look feedback form](https://github.com/KyrocEU/bookland/issues/new?template=first-look.yml). A short screen recording is welcome if it does not show private content.
+3. Share your impression in the [Bookland discussion](https://github.com/KyrocEU/bookland/discussions/2), or use the [first-look feedback form](https://github.com/KyrocEU/bookland/issues/new?template=first-look.yml) for a specific problem. A short screen recording is welcome if it does not show private content.
 
 For a reproducible failure, use the [bug report form](https://github.com/KyrocEU/bookland/issues/new?template=bug-report.yml). Include the Mac model, macOS version, Bookland release, and the player or browser involved. Describe the exact steps and what you expected. Please remove account names, calendar details, API keys, and other private information from screenshots and logs.
 
