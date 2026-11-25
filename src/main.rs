@@ -2011,9 +2011,12 @@ fn native_morph_frames(center_x: f32, top_y: f32,
     closed: (f32, f32), open: (f32, f32),
     position: f32, velocity: f32, target: f32, omega: f32, damping: f32)
     -> Vec<NativeMorphFrame> {
-    let mut frames = Vec::with_capacity(61);
+    // At the slowest user speed the spring still has a few pixels to travel
+    // after one second. Let Core Animation finish the motion before snapping
+    // the final sample to the exact target; this work runs only on a morph.
+    let mut frames = Vec::with_capacity(121);
     let (mut position, mut velocity) = (position, velocity);
-    for index in 0..=60 {
+    for index in 0..=120 {
         let progress = position.clamp(0.0, 1.02);
         let width = egui::lerp(closed.0..=open.0, progress);
         let height = egui::lerp(closed.1..=open.1, progress);
@@ -2027,8 +2030,8 @@ fn native_morph_frames(center_x: f32, top_y: f32,
             bottom_radius: f64::from(17.0 + progress * 12.0),
             opacity: f64::from(1.0 - reveal),
         });
-        if index > 1 && (position - target).abs() < 0.005
-            && velocity.abs() < 0.02 { break; }
+        if index > 1 && (position - target).abs() < 0.002
+            && velocity.abs() < 0.012 { break; }
         (position, velocity) = spring_step(position, velocity, target,
             omega, damping, 1.0 / 60.0);
     }
@@ -2095,13 +2098,26 @@ mod hover_gate_tests {
         let frames = native_morph_frames(300.0, 0.0, (255.0, 33.0),
             (585.0, 230.0), 0.0, 0.0, 1.0,
             std::f32::consts::TAU / 0.5, 0.82);
-        assert!(frames.len() > 10 && frames.len() <= 61);
+        assert!(frames.len() > 10 && frames.len() <= 121);
         assert_eq!((frames[0].width, frames[0].height), (255.0, 33.0));
         assert_eq!((frames.last().unwrap().width, frames.last().unwrap().height),
             (585.0, 230.0));
         assert!(frames.iter().all(|frame| frame.y == 0.0));
         assert_eq!(frames.first().unwrap().opacity, 1.0);
         assert_eq!(frames.last().unwrap().opacity, 0.0);
+    }
+
+    #[test]
+    fn slow_native_morph_has_no_visible_final_size_jump() {
+        let omega = std::f32::consts::TAU * 0.5 / 0.5;
+        for (start, target) in [(0.0, 1.0), (1.0, 0.0)] {
+            let frames = native_morph_frames(300.0, 0.0, (255.0, 33.0),
+                (585.0, 230.0), start, 0.0, target, omega, 0.82);
+            let previous = &frames[frames.len() - 2];
+            let final_frame = &frames[frames.len() - 1];
+            assert!((previous.width - final_frame.width).abs() < 1.0);
+            assert!((previous.height - final_frame.height).abs() < 1.0);
+        }
     }
 }
 #[cfg(test)]
