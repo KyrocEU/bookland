@@ -4,11 +4,15 @@ set -eu
 cd "$(dirname "$0")"
 
 version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Info.plist)
+source_version=$(awk -F '"' '/^version = "/ { print $2; exit }' Cargo.toml)
 minimum=$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' Info.plist)
 bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' Info.plist)
 case "$version" in
     ''|*[!0-9A-Za-z.-]*) echo 'Invalid app version' >&2; exit 1 ;;
 esac
+test "$version" = "$source_version" || {
+    echo 'Info.plist and Cargo.toml versions do not match' >&2; exit 1;
+}
 case "$minimum" in
     ''|*[!0-9.]*) echo 'Invalid minimum macOS version' >&2; exit 1 ;;
 esac
