@@ -990,8 +990,8 @@ struct DeskApp {
     media_duration: f32,
     media_playing: bool,
     media_rx: Option<std::sync::mpsc::Receiver<MediaSnapshot>>,
-    media_action_tx: std::sync::mpsc::Sender<(bool, Option<bool>)>,
-    media_action_rx: std::sync::mpsc::Receiver<(bool, Option<bool>)>,
+    media_action_tx: std::sync::mpsc::Sender<MediaActionResult>,
+    media_action_rx: std::sync::mpsc::Receiver<MediaActionResult>,
     media_actions_pending: usize,
     last_media_request: Instant,
     airplay_open: bool,
@@ -1404,6 +1404,31 @@ mod media_script_tests {
         assert_eq!(osascript_with_timeout("delay 2", Duration::from_millis(100)), None);
         assert!(started.elapsed() < Duration::from_secs(1));
     }
+
+    #[test]
+    fn failed_seek_restores_position_without_rewinding_a_new_track() {
+        let mut app = DeskApp::new(None, 0, true, eframe::egui::Context::default());
+        app.media_title = "First track".into();
+        app.media_position = 100.0;
+        app.media_duration = 300.0;
+        app.media_playing = false;
+        app.media_actions_pending = 1;
+        app.apply_media_action_result(MediaActionResult {
+            success: false, previous_playing: None,
+            seek_rollback: Some((45.0, Instant::now(), "First track".into())),
+        });
+        assert_eq!(app.media_position, 45.0);
+        assert_eq!(app.media_actions_pending, 0);
+
+        app.media_title = "Second track".into();
+        app.media_position = 80.0;
+        app.media_actions_pending = 1;
+        app.apply_media_action_result(MediaActionResult {
+            success: false, previous_playing: None,
+            seek_rollback: Some((20.0, Instant::now(), "First track".into())),
+        });
+        assert_eq!(app.media_position, 80.0);
+    }
 }
 struct MediaSnapshot {
     app: Option<String>,
@@ -1412,6 +1437,11 @@ struct MediaSnapshot {
     position: f32,
     duration: f32,
     playing: bool,
+}
+struct MediaActionResult {
+    success: bool,
+    previous_playing: Option<bool>,
+    seek_rollback: Option<(f32, Instant, String)>,
 }
 fn system_media() -> Option<MediaSnapshot> {
     let value = media_remote_adapter::now_playing().or_else(|| {
@@ -3929,16 +3959,8 @@ impl DeskApp {
             self.last_media_request = Instant::now();
             std::thread::spawn(move || { let _ = sender.send(read_media(&source)); });
         }
-        while let Ok((success, previous_playing)) = self.media_action_rx.try_recv() {
-            self.media_actions_pending = self.media_actions_pending.saturating_sub(1);
-            if !success {
-                if let Some(previous_playing) = previous_playing {
-                    self.media_playing = previous_playing;
-                }
-                self.notify("Playback control was unavailable");
-            }
-            self.media_rx = None;
-            self.last_media_request = Instant::now() - Duration::from_secs(6);
+        while let Ok(result) = self.media_action_rx.try_recv() {
+            self.apply_media_action_result(result);
         }
         if let Some(result) = self.artwork_rx.as_ref().and_then(|receiver| receiver.try_recv().ok()) {
             self.artwork_rx = None;
@@ -4137,6 +4159,25 @@ impl DeskApp {
             self.notify(format!("Could not open {player}"));
         }
     }
+    fn apply_media_action_result(&mut self, result: MediaActionResult) {
+        self.media_actions_pending = self.media_actions_pending.saturating_sub(1);
+        if !result.success {
+            if let Some(previous_playing) = result.previous_playing {
+                self.media_playing = previous_playing;
+            }
+            if let Some((position, started, title)) = result.seek_rollback {
+                if self.media_title == title {
+                    self.media_position = (position
+                        + if self.media_playing { started.elapsed().as_secs_f32() }
+                            else { 0.0 }).clamp(0.0, self.media_duration.max(0.0));
+                    self.last_media_poll = Instant::now();
+                }
+            }
+            self.notify("Playback control was unavailable");
+        }
+        self.media_rx = None;
+        self.last_media_request = Instant::now() - Duration::from_secs(6);
+    }
     fn media_action(&mut self, action: &str) -> bool {
         let source = self.prefs.media_source.clone();
         let system_source = source == "System" || source == "Auto";
@@ -4152,7 +4193,9 @@ impl DeskApp {
                         .stderr(Stdio::null()).status()
                         .is_ok_and(|status| status.success());
                     if opened { let _ = media_script(player, "play"); }
-                    let _ = sender.send((opened, None));
+                    let _ = sender.send(MediaActionResult {
+                        success: opened, previous_playing: None, seek_rollback: None,
+                    });
                 });
             } else {
                 self.notify("Start a song before using playback controls");
@@ -4168,6 +4211,18 @@ impl DeskApp {
             return false;
         }
         let previous_playing = (action == "playpause").then_some(self.media_playing);
+        let seek_rollback = action.strip_prefix("set player position to ")
+            .and_then(|value| value.parse::<f32>().ok())
+            .filter(|target| target.is_finite() && *target >= 0.0)
+            .map(|target| {
+                let previous = (self.media_position
+                    + if self.media_playing { self.last_media_poll.elapsed().as_secs_f32() }
+                        else { 0.0 }).clamp(0.0, self.media_duration.max(0.0));
+                let started = Instant::now();
+                self.media_position = target.clamp(0.0, self.media_duration.max(0.0));
+                self.last_media_poll = started;
+                (previous, started, self.media_title.clone())
+            });
         let action = if action == "playpause" {
             if self.media_playing {
                 self.media_position = (self.media_position
@@ -4193,7 +4248,9 @@ impl DeskApp {
                     && system_media_control(&action))
                     || media_script(&app, &action).is_some()
             } else { false };
-            let _ = sender.send((success, previous_playing));
+            let _ = sender.send(MediaActionResult {
+                success, previous_playing, seek_rollback,
+            });
         });
         true
     }
@@ -4204,10 +4261,7 @@ impl DeskApp {
         let position = self.media_position
             + if self.media_playing { self.last_media_poll.elapsed().as_secs_f32() } else { 0.0 };
         if let Some(target) = browser_skip_target(position, self.media_duration, backward) {
-            if self.media_action(&format!("set player position to {target}")) {
-                self.media_position = target;
-                self.last_media_poll = Instant::now();
-            }
+            self.media_action(&format!("set player position to {target}"));
         } else {
             self.notify("This player did not provide a timeline");
         }
@@ -4217,8 +4271,6 @@ impl DeskApp {
         if slider.drag_stopped() || (slider.changed() && !slider.dragged()) {
             let target = target.clamp(0.0, self.media_duration);
             self.media_seek_preview = None;
-            self.media_position = target;
-            self.last_media_poll = Instant::now();
             if self.media_app.is_some() {
                 self.media_action(&format!("set player position to {target}"));
             }

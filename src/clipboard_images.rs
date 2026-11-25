@@ -105,11 +105,15 @@ pub fn prune(directory: &Path, keep: &[SavedImage]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static NEXT_SCRATCH: AtomicU64 = AtomicU64::new(0);
 
     fn scratch() -> PathBuf {
-        std::env::temp_dir().join(format!("bookland-clipboard-images-{}-{}",
+        std::env::temp_dir().join(format!("bookland-clipboard-images-{}-{}-{}",
             std::process::id(), std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()))
+                .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos(),
+            NEXT_SCRATCH.fetch_add(1, Ordering::Relaxed)))
     }
 
     #[test]
