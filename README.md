@@ -10,7 +10,15 @@ Follow the build: [YouTube](https://www.youtube.com/@booklandmac) · [X](https:/
 
 Bookland is free and open source, with no Bookland account, trial, or subscription. The current app is available as a downloadable 0.1.4 preview. It is an independent project inspired by the hover island in NotchNook. It is not a copy of NotchNook's code or a claim that every original feature is complete. Bookland is not affiliated with NotchNook or OpenAI.
 
-The [22-second demo](https://kyroceu.github.io/bookland/#films) uses real Mac screen captures to show Bookland opening at the camera, moving a YouTube video back 15 seconds, and closing again. If you try the preview, share your first impression in the [Bookland discussion](https://github.com/KyrocEU/bookland/discussions/2). For a reproducible issue, use the [first-look feedback form](https://github.com/KyrocEU/bookland/issues/new?template=first-look.yml). Please report whether hover opens promptly, closes after you leave, and controls your player correctly; include your Mac model, macOS version, and player or browser. See [CONTRIBUTING.md](CONTRIBUTING.md) for the short tester and code contribution guide.
+## Try the preview
+
+1. On an Apple Silicon Mac running macOS 26 or later, download the [Bookland 0.1.4 ZIP](https://github.com/KyrocEU/bookland/releases/download/v0.1.4/Bookland-0.1.4-macOS-26.0.zip). The [release page](https://github.com/KyrocEU/bookland/releases/tag/v0.1.4) has its SHA-256 checksum and signing notes.
+2. Extract the ZIP, move `Bookland.app` to Applications, and open it. Bookland appears beside the camera rather than in the Dock. The build is locally signed but not Apple-notarized, so macOS may ask you to use **System Settings → Privacy & Security → Open Anyway** after the first launch attempt.
+3. Hover beside the camera, try one real action in Music, Calendar, or Codex, and move the pointer away. Tell us what happened in the [first-look discussion](https://github.com/KyrocEU/bookland/discussions/2); use the [feedback form](https://github.com/KyrocEU/bookland/issues/new?template=first-look.yml) if you can name a specific problem.
+
+[Watch the real Mac demo](https://kyroceu.github.io/bookland/#films) before installing. The preview is for testing: the [current limits](#current-limits) matter, especially for macOS permissions and player-specific media controls.
+
+The 22-second demo uses real Mac screen captures to show Bookland opening at the camera, moving a YouTube video back 15 seconds, and closing again. For feedback, please report whether hover opens promptly, closes after you leave, and controls your player correctly; include your Mac model, macOS version, and player or browser. See [CONTRIBUTING.md](CONTRIBUTING.md) for the short tester and code contribution guide.
 
 Three [25-second Bookland films](https://kyroceu.github.io/bookland/#films) show the hover island, a Codex answer, and music controls. They use real app captures, Adrian narration, and motion in Bookland's ink, glass blue, and ice palette. Watch them on the public site:
 
