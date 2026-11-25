@@ -985,6 +985,8 @@ struct DeskApp {
     media_artist: String,
     media_app: Option<String>,
     media_position: f32,
+    // An in-progress drag must not jump when the background media poll returns.
+    media_seek_preview: Option<f32>,
     media_duration: f32,
     media_playing: bool,
     media_rx: Option<std::sync::mpsc::Receiver<MediaSnapshot>>,
@@ -2804,6 +2806,7 @@ impl DeskApp {
             media_artist: "Press Play for music".into(),
             media_app: None,
             media_position: 0.0,
+            media_seek_preview: None,
             media_duration: 0.0,
             media_playing: false,
             media_rx: None,
@@ -3901,6 +3904,9 @@ impl DeskApp {
         match media_result {
             Some(Ok(snapshot)) => {
                 self.media_rx = None;
+                if self.media_app != snapshot.app || self.media_title != snapshot.title {
+                    self.media_seek_preview = None;
+                }
                 self.media_app = snapshot.app;
                 self.media_title = snapshot.title;
                 self.media_artist = snapshot.artist;
@@ -4206,6 +4212,24 @@ impl DeskApp {
             self.notify("This player did not provide a timeline");
         }
     }
+    fn handle_media_seek_slider(&mut self, ui: &egui::Ui,
+                                slider: &egui::Response, target: f32) {
+        if slider.drag_stopped() || (slider.changed() && !slider.dragged()) {
+            let target = target.clamp(0.0, self.media_duration);
+            self.media_seek_preview = None;
+            self.media_position = target;
+            self.last_media_poll = Instant::now();
+            if self.media_app.is_some() {
+                self.media_action(&format!("set player position to {target}"));
+            }
+        } else if slider.changed() && slider.dragged() {
+            self.media_seek_preview = Some(target);
+        } else if self.media_seek_preview.is_some()
+            && !ui.input(|input| input.pointer.any_down()) {
+            // A workspace can disappear while the pointer is dragging.
+            self.media_seek_preview = None;
+        }
+    }
     fn refresh_music_airplay(&mut self) {
         if self.airplay_rx.is_some() { return; }
         if running_media_app("Music").is_none() {
@@ -4368,20 +4392,14 @@ impl DeskApp {
                     11.0,
                     MUTED,
                 );
-                let mut position = self.media_position;
+                let mut position = self.media_seek_preview.unwrap_or(self.media_position)
+                    .clamp(0.0, self.media_duration.max(1.0));
                 let slider = ui.add_enabled(
                     self.media_duration > 0.0,
                     egui::Slider::new(&mut position, 0.0..=self.media_duration.max(1.0))
                         .show_value(false),
                 );
-                if slider.changed() {
-                    self.media_position = position;
-                    self.last_media_poll = Instant::now();
-                }
-                if self.media_app.is_some()
-                    && (slider.drag_stopped() || (slider.changed() && !slider.dragged())) {
-                    self.media_action(&format!("set player position to {}", position));
-                }
+                self.handle_media_seek_slider(ui, &slider, position);
             }
         });
     }
@@ -5149,19 +5167,13 @@ impl DeskApp {
                     let displayed = (self.media_position
                         + if self.media_playing { self.last_media_poll.elapsed().as_secs_f32() } else { 0.0 })
                         .clamp(0.0, self.media_duration);
-                    let mut seek_to = displayed;
+                    let mut seek_to = self.media_seek_preview.unwrap_or(displayed)
+                        .clamp(0.0, self.media_duration);
                     let slider = ui.add_sized([380.0, 20.0], egui::Slider::new(
                         &mut seek_to, 0.0..=self.media_duration).show_value(false));
-                    if slider.changed() {
-                        self.media_position = seek_to;
-                        self.last_media_poll = Instant::now();
-                    }
-                    if self.media_app.is_some()
-                        && (slider.drag_stopped() || (slider.changed() && !slider.dragged())) {
-                        self.media_action(&format!("set player position to {seek_to}"));
-                    }
+                    self.handle_media_seek_slider(ui, &slider, seek_to);
                     label(ui, &format!("{} / {}",
-                        format_time(displayed as u64), format_time(self.media_duration as u64)),
+                        format_time(seek_to as u64), format_time(self.media_duration as u64)),
                         11.0, MUTED);
                 }
             });
@@ -6896,22 +6908,16 @@ impl DeskApp {
                     let displayed = (self.media_position
                         + if self.media_playing { self.last_media_poll.elapsed().as_secs_f32() }
                             else { 0.0 }).clamp(0.0, self.media_duration);
-                    let mut seek_to = displayed;
+                    let mut seek_to = self.media_seek_preview.unwrap_or(displayed)
+                        .clamp(0.0, self.media_duration);
                     let old_slider_width = ui.spacing().slider_width;
                     ui.spacing_mut().slider_width = width - 42.0;
                     let seek = ui.add(egui::Slider::new(
                         &mut seek_to, 0.0..=self.media_duration).show_value(false));
                     ui.spacing_mut().slider_width = old_slider_width;
-                    if seek.changed() {
-                        self.media_position = seek_to;
-                        self.last_media_poll = Instant::now();
-                    }
-                    if self.media_app.is_some()
-                        && (seek.drag_stopped() || (seek.changed() && !seek.dragged())) {
-                        self.media_action(&format!("set player position to {seek_to}"));
-                    }
+                    self.handle_media_seek_slider(ui, &seek, seek_to);
                     ui.horizontal(|ui| {
-                        label(ui, &format_time(displayed as u64), 10.0, MUTED);
+                        label(ui, &format_time(seek_to as u64), 10.0, MUTED);
                         ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                             label(ui, &format_time(self.media_duration as u64), 10.0, MUTED);
                         });
