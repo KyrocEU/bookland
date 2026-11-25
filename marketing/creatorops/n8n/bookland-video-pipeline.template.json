@@ -1,0 +1,1365 @@
+{
+  "name": "Bookland CreatorOps | Music demo (template)",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Bookland | New Music demo",
+        "formDescription": "Enter a Bookland brand brief and one Music angle. A draft is generated for human approval. No render or social publication happens before approval.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Brand config JSON",
+              "fieldType": "textarea",
+              "placeholder": "{\"name\":\"Bookland\",\"voice\":\"energetic\",\"audience\":\"Mac users\",\"cta\":\"COMMENT BOOKLAND\"}",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Topic",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {
+          "path": "creatorops-video-pipeline",
+          "respondWithOptions": {
+            "values": {
+              "formSubmittedText": "Received. The draft is saved in the data table \"creatorops_video_drafts\" with an approval_url. Nothing is rendered or published until it is approved."
+            }
+          }
+        }
+      },
+      "id": "260db539-6454-4801-801b-9ddd847b8f0f",
+      "name": "Submit Brand Config + Topic",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "run_id",
+              "type": "string",
+              "value": "={{ $execution.id }}"
+            },
+            {
+              "id": "a2",
+              "name": "topic",
+              "type": "string",
+              "value": "={{ $json.Topic }}"
+            },
+            {
+              "id": "a3",
+              "name": "brand",
+              "type": "object",
+              "value": "={{ JSON.parse($json[\"Brand config JSON\"]) }}"
+            },
+            {
+              "id": "a4",
+              "name": "brand_name",
+              "type": "string",
+              "value": "={{ JSON.parse($json[\"Brand config JSON\"]).name || \"Unnamed brand\" }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "14385454-a048-47ee-b617-7fed09cf080b",
+      "name": "Parse Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        272,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Brand config (JSON):\n{{ JSON.stringify($json.brand) }}\n\nTopic angle: {{ $json.topic }}\n\nCreate a 22-second English package for the fixed BooklandMusicReal composition. It uses recorded Bookland footage only: 0–4s problem, 4–8s real hover opening beside the MacBook camera, 8–16s the same recorded YouTube session seeking back 15 seconds (00:45 to 00:30), 16–18s real island collapse, 18–22s Bookland logo and CTA. Do not invent shots or claim other features appear in this film. Bookland is free, open source, and currently for Apple Silicon Macs on macOS 26+.\n\nGenerate three different short hooks; choose one with a clear pain point in the first two seconds. script.hook is at most six short words, script.body at most one short line, script.cta exactly COMMENT\\nBOOKLAND, and script.duration_seconds is 22. Keep voiceover around 45–55 words with a human, energetic delivery. Make Instagram and TikTok captions distinct, truthful, and focused on one action: comment BOOKLAND for the link. Do not promise an automatic DM or paid features. Return only the required schema.",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are a short-form video strategist for Bookland. Follow the brand config and output JSON schema exactly. Produce three distinct hooks, one 22-second English script with about 45-55 spoken words, and a 9:16 shot plan that covers 0-22 seconds with no gaps. The footage is fixed and real: hover opening, YouTube 15-second seek in one take, island collapse, and Bookland end card. Do not invent other footage, product features, testimonials, performance claims, or automated link delivery. Write distinct Instagram and TikTok captions with one ask: comment BOOKLAND for the link. Keep claims verifiable. Return only data matching the required JSON schema."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "id": "7def0288-71a2-452d-b4f4-6882b4811c6a",
+      "name": "Generate Video Package",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        496,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-6.1-sol",
+          "cachedResultName": "gpt-6.1-sol"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "46b9f564-6d0f-4d0d-a193-d59283b2a54e",
+      "name": "AI Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        512,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"required\": [\n    \"hooks\",\n    \"script\",\n    \"shot_plan\",\n    \"captions\"\n  ],\n  \"properties\": {\n    \"hooks\": {\n      \"type\": \"array\",\n      \"minItems\": 3,\n      \"maxItems\": 3,\n      \"items\": {\n        \"type\": \"object\",\n        \"required\": [\n          \"text\",\n          \"style\"\n        ],\n        \"properties\": {\n          \"text\": {\n            \"type\": \"string\",\n            \"description\": \"Hook line, max 12 words, spoken in the first 2 seconds\"\n          },\n          \"style\": {\n            \"type\": \"string\",\n            \"description\": \"e.g. question, bold claim, pattern interrupt\"\n          }\n        }\n      }\n    },\n    \"script\": {\n      \"type\": \"object\",\n      \"required\": [\n        \"language\",\n        \"duration_seconds\",\n        \"voiceover\",\n        \"on_screen_text\",\n        \"hook\",\n        \"body\",\n        \"cta\"\n      ],\n      \"properties\": {\n        \"language\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"en\"\n          ]\n        },\n        \"duration_seconds\": {\n          \"type\": \"number\",\n          \"enum\": [\n            22\n          ],\n          \"description\": \"The fixed recorded Music composition lasts 22 seconds\"\n        },\n        \"voiceover\": {\n          \"type\": \"string\",\n          \"description\": \"English, about 45–55 words, only about real Bookland Music and the recorded YouTube seek\"\n        },\n        \"on_screen_text\": {\n          \"type\": \"array\",\n          \"items\": {\n            \"type\": \"string\"\n          }\n        },\n        \"hook\": {\n          \"type\": \"string\",\n          \"maxLength\": 50,\n          \"description\": \"Opening title, at most 6 short words\"\n        },\n        \"body\": {\n          \"type\": \"string\",\n          \"maxLength\": 70,\n          \"description\": \"Short on-screen line about the real 15-second seek\"\n        },\n        \"cta\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"COMMENT\\nBOOKLAND\"\n          ]\n        }\n      }\n    },\n    \"shot_plan\": {\n      \"type\": \"array\",\n      \"description\": \"9:16 timing for the five fixed real-footage scenes from 0–22 seconds: problem 0–4, hover 4–8, recorded seek 8–16, collapse 16–18, Bookland CTA 18–22. Do not invent new shots.\",\n      \"items\": {\n        \"type\": \"object\",\n        \"required\": [\n          \"shot\",\n          \"start_s\",\n          \"end_s\",\n          \"aspect_ratio\",\n          \"visual\",\n          \"camera\",\n          \"on_screen_text\"\n        ],\n        \"properties\": {\n          \"shot\": {\n            \"type\": \"number\"\n          },\n          \"start_s\": {\n            \"type\": \"number\"\n          },\n          \"end_s\": {\n            \"type\": \"number\"\n          },\n          \"aspect_ratio\": {\n            \"type\": \"string\",\n            \"enum\": [\n              \"9:16\"\n            ]\n          },\n          \"visual\": {\n            \"type\": \"string\"\n          },\n          \"camera\": {\n            \"type\": \"string\"\n          },\n          \"on_screen_text\": {\n            \"type\": \"string\"\n          }\n        }\n      }\n    },\n    \"captions\": {\n      \"type\": \"object\",\n      \"required\": [\n        \"instagram\",\n        \"tiktok\"\n      ],\n      \"properties\": {\n        \"instagram\": {\n          \"type\": \"object\",\n          \"required\": [\n            \"caption\",\n            \"hashtags\"\n          ],\n          \"properties\": {\n            \"caption\": {\n              \"type\": \"string\"\n            },\n            \"hashtags\": {\n              \"type\": \"array\",\n              \"items\": {\n                \"type\": \"string\"\n              }\n            }\n          }\n        },\n        \"tiktok\": {\n          \"type\": \"object\",\n          \"required\": [\n            \"caption\",\n            \"hashtags\"\n          ],\n          \"properties\": {\n            \"caption\": {\n              \"type\": \"string\",\n              \"description\": \"Max 150 characters before hashtags\"\n            },\n            \"hashtags\": {\n              \"type\": \"array\",\n              \"items\": {\n                \"type\": \"string\"\n              }\n            }\n          }\n        }\n      }\n    }\n  }\n}"
+      },
+      "id": "10458569-294b-4748-9f9a-548cac6451d0",
+      "name": "Video Package Schema",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        640,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<SET_DATA_TABLE_ID>",
+          "cachedResultName": "creatorops_video_drafts"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "run_id": "={{ $(\"Parse Input\").first().json.run_id }}",
+            "brand_name": "={{ $(\"Parse Input\").first().json.brand_name }}",
+            "topic": "={{ $(\"Parse Input\").first().json.topic }}",
+            "status": "pending_approval",
+            "draft_json": "={{ JSON.stringify($json.output) }}",
+            "approval_url": "={{ $execution.resumeFormUrl }}",
+            "submitted_at": "={{ $now.toISO() }}"
+          },
+          "schema": [
+            {
+              "id": "run_id",
+              "displayName": "run_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "brand_name",
+              "displayName": "brand_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "topic",
+              "displayName": "topic",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "draft_json",
+              "displayName": "draft_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "approval_url",
+              "displayName": "approval_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "submitted_at",
+              "displayName": "submitted_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a7be66d6-99e0-499f-96cf-c5c3392769fc",
+      "name": "Save Draft",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        848,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "form",
+        "formTitle": "Approve video draft before rendering",
+        "formDescription": "=<b>Topic:</b> {{ $(\"Parse Input\").first().json.topic }}<br><pre style=\"white-space:pre-wrap\">{{ JSON.stringify($(\"Generate Video Package\").first().json.output, null, 2) }}</pre>Approving sends a render job to the Remotion worker and then prepares publishing. Rejecting or letting this expire stops the run.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Decision",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Approve"
+                  },
+                  {
+                    "option": "Reject"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Reviewer notes",
+              "fieldType": "textarea"
+            }
+          ]
+        },
+        "limitWaitTime": true,
+        "resumeAmount": 3,
+        "resumeUnit": "days",
+        "options": {}
+      },
+      "id": "789a90be-48bd-4913-825f-98da1ffbdec6",
+      "name": "Await Approval",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        800,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.Decision }}",
+              "rightValue": "Approve",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "093cc23f-78e4-49e5-9c5d-971f81240e0b",
+      "name": "Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        1024,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<SET_DATA_TABLE_ID>",
+          "cachedResultName": "creatorops_video_drafts"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "run_id",
+              "keyValue": "={{ $(\"Parse Input\").first().json.run_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "approved_rendering"
+          },
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e4d886ed-f3a0-4108-a72f-4acbba2abd15",
+      "name": "Mark Approved",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1248,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "r1",
+              "name": "worker_base_url",
+              "type": "string",
+              "value": "<SET_WORKER_URL>"
+            },
+            {
+              "id": "r2",
+              "name": "composition_id",
+              "type": "string",
+              "value": "BooklandMusicReal"
+            },
+            {
+              "id": "r3",
+              "name": "poll_interval_seconds",
+              "type": "number",
+              "value": 20
+            },
+            {
+              "id": "r4",
+              "name": "max_poll_attempts",
+              "type": "number",
+              "value": 45
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3fe8f703-eee9-405b-95a5-eb5f56b5d5d8",
+      "name": "Render Config (EDIT ME)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1328,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.worker_base_url }}",
+              "rightValue": "https://",
+              "operator": {
+                "type": "string",
+                "operation": "startsWith"
+              }
+            },
+            {
+              "leftValue": "={{ $json.worker_base_url }}",
+              "rightValue": "<SET_",
+              "operator": {
+                "type": "string",
+                "operation": "notContains"
+              }
+            },
+            {
+              "leftValue": "={{ $json.composition_id }}",
+              "rightValue": "<SET_",
+              "operator": {
+                "type": "string",
+                "operation": "notContains"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2e713109-3f4a-4498-b731-6fe60a989467",
+      "name": "Worker Configured?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        1552,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.worker_base_url }}/renders",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { jobId: $(\"Parse Input\").first().json.run_id, composition: $json.composition_id, inputProps: { feature: \"music\", brand: $(\"Parse Input\").first().json.brand, topic: $(\"Parse Input\").first().json.topic, script: $(\"Generate Video Package\").first().json.output.script, shotPlan: $(\"Generate Video Package\").first().json.output.shot_plan }, output: { format: \"mp4\", codec: \"h264\", width: 1080, height: 1920, fps: 30 }, delivery: \"worker-storage-url\" } }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "c241f008-12e9-46c3-8af3-5ba0f3131d5f",
+      "name": "Submit Render Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1776,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "p1",
+              "name": "render_id",
+              "type": "string",
+              "value": "={{ $json.renderId ?? $json.id }}"
+            },
+            {
+              "id": "p2",
+              "name": "worker_base_url",
+              "type": "string",
+              "value": "={{ $(\"Render Config (EDIT ME)\").first().json.worker_base_url }}"
+            },
+            {
+              "id": "p3",
+              "name": "poll_interval_seconds",
+              "type": "number",
+              "value": "={{ $(\"Render Config (EDIT ME)\").first().json.poll_interval_seconds }}"
+            },
+            {
+              "id": "p4",
+              "name": "attempts",
+              "type": "array",
+              "value": "={{ Array.from({ length: Number($(\"Render Config (EDIT ME)\").first().json.max_poll_attempts) }, (_, i) => i + 1) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "18f80106-c393-4a4d-b5b1-e63fa92daff0",
+      "name": "Prepare Polling",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1856,
+        416
+      ]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "attempts",
+        "include": "allOtherFields",
+        "options": {
+          "destinationFieldName": "attempt"
+        }
+      },
+      "id": "797866ff-602b-4e7a-aed0-f0afde8d5d16",
+      "name": "One Item per Poll Attempt",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1.1,
+      "position": [
+        2080,
+        416
+      ]
+    },
+    {
+      "parameters": {
+        "errorMessage": "Render did not complete within the configured max_poll_attempts. Check the Remotion worker, or raise max_poll_attempts / poll_interval_seconds in \"Render Config (EDIT ME)\"."
+      },
+      "id": "4be2e847-567f-4f9a-850a-6c7b05bf2bb4",
+      "name": "STOP: Render Timed Out",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        2528,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "amount": "={{ $json.poll_interval_seconds }}"
+      },
+      "id": "e1adce0e-31e1-49a5-aa58-e5cc922f45b3",
+      "name": "Wait Before Poll",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2528,
+        416
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.worker_base_url }}/renders/{{ $json.render_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "95de87ab-6e9e-488d-9550-62e115af5ada",
+      "name": "Get Render Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2752,
+        416
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "combinator": "and",
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "completed",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "completed"
+            },
+            {
+              "conditions": {
+                "combinator": "or",
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "failed",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "cancelled",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "failed"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "still rendering"
+        }
+      },
+      "id": "7fb5c034-c25e-4f6e-9e7e-56c804dfc0fe",
+      "name": "Render State",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.5,
+      "position": [
+        2976,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.output.width }}",
+              "rightValue": 1080,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            },
+            {
+              "leftValue": "={{ $json.output.height }}",
+              "rightValue": 1920,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            },
+            {
+              "leftValue": "={{ $json.output.format }}",
+              "rightValue": "mp4",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "leftValue": "={{ $json.output.url }}",
+              "rightValue": "https://",
+              "operator": {
+                "type": "string",
+                "operation": "startsWith"
+              }
+            },
+            {
+              "leftValue": "={{ $json.output.durationSeconds }}",
+              "rightValue": 20,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            },
+            {
+              "leftValue": "={{ $json.output.durationSeconds }}",
+              "rightValue": 30,
+              "operator": {
+                "type": "number",
+                "operation": "lte"
+              }
+            }
+          ]
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "717b1cb5-8bd0-4452-920f-c89b4a40bdcb",
+      "name": "Valid 1080x1920 MP4?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        3200,
+        416
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "v1",
+              "name": "validated",
+              "type": "boolean",
+              "value": true
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "1fee98f4-5c8a-46e7-aef9-a7930826a922",
+      "name": "Video Ready",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        3424,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "i1",
+              "name": "ig_user_id",
+              "type": "string",
+              "value": "<SET_INSTAGRAM_BUSINESS_ACCOUNT_ID>"
+            },
+            {
+              "id": "i2",
+              "name": "graph_api_version",
+              "type": "string",
+              "value": "<SET_GRAPH_API_VERSION>"
+            },
+            {
+              "id": "i3",
+              "name": "video_url",
+              "type": "string",
+              "value": "={{ $json.output.url }}"
+            },
+            {
+              "id": "i4",
+              "name": "caption",
+              "type": "string",
+              "value": "={{ $(\"Generate Video Package\").first().json.output.captions.instagram.caption }}\n\n{{ $(\"Generate Video Package\").first().json.output.captions.instagram.hashtags.join(\" \") }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1d0c093a-9bbc-4c7e-985f-043436e66484",
+      "name": "Prepare Instagram Reel",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2384,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/{{ $json.graph_api_version }}/{{ $json.ig_user_id }}/media",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "media_type",
+              "value": "REELS"
+            },
+            {
+              "name": "video_url",
+              "value": "={{ $json.video_url }}"
+            },
+            {
+              "name": "caption",
+              "value": "={{ $json.caption }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3199a8ee-b604-4093-9a9b-608a01a1491c",
+      "name": "DISABLED: Instagram Create Reel Container",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2608,
+        128
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/{{ $(\"Prepare Instagram Reel\").first().json.graph_api_version }}/{{ $(\"Prepare Instagram Reel\").first().json.ig_user_id }}/media_publish",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "creation_id",
+              "value": "={{ $json.id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7a2d41eb-8d42-4bb0-89ae-bffd72b1cc91",
+      "name": "DISABLED: Instagram Publish Container",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2832,
+        128
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "t1",
+              "name": "privacy_level",
+              "type": "string",
+              "value": "<SET_TIKTOK_PRIVACY_LEVEL>"
+            },
+            {
+              "id": "t2",
+              "name": "video_url",
+              "type": "string",
+              "value": "={{ $json.output.url }}"
+            },
+            {
+              "id": "t3",
+              "name": "title",
+              "type": "string",
+              "value": "={{ $(\"Generate Video Package\").first().json.output.captions.tiktok.caption }} {{ $(\"Generate Video Package\").first().json.output.captions.tiktok.hashtags.join(\" \") }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "eb81c7a5-e6ba-4698-9d54-3758c00d62a2",
+      "name": "Prepare TikTok Post",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2384,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://open.tiktokapis.com/v2/post/publish/video/init/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { post_info: { title: $json.title, privacy_level: $json.privacy_level }, source_info: { source: \"PULL_FROM_URL\", video_url: $json.video_url } } }}",
+        "options": {}
+      },
+      "id": "1891bd08-8758-43ab-8b0c-04b77e362b6b",
+      "name": "DISABLED: TikTok Init Video Post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2608,
+        320
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "errorMessage": "={{ $json.status === \"completed\" ? \"Worker output failed validation (need mp4, 1080x1920, https url, 20-30s). Got: \" + JSON.stringify($json.output) : \"Remotion worker reported render status \" + $json.status + \": \" + ($json.error ?? \"no error detail\") }}"
+      },
+      "id": "bf46c653-84c8-4471-a197-a9dc1dc51213",
+      "name": "STOP: Render Failed or Invalid",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        3424,
+        592
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "3a4009b7-b806-4a35-981d-7703f51cee3b",
+      "name": "Poll Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        2304,
+        416
+      ]
+    },
+    {
+      "parameters": {
+        "errorMessage": "Remotion worker is not configured. Edit the \"Render Config (EDIT ME)\" node: set worker_base_url (https) and composition_id, then attach the worker credential on \"Submit Render Job\" and \"Get Render Status\"."
+      },
+      "id": "de4dd38f-a23c-4390-9c50-dae7d4142dd1",
+      "name": "STOP: Remotion Worker Not Configured",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        1776,
+        416
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<SET_DATA_TABLE_ID>",
+          "cachedResultName": "creatorops_video_drafts"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "run_id",
+              "keyValue": "={{ $(\"Parse Input\").first().json.run_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "rejected_or_expired"
+          },
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5de46faa-d0b9-4b81-a328-36f674ce05f8",
+      "name": "Mark Rejected",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1248,
+        416
+      ]
+    }
+  ],
+  "connections": {
+    "Submit Brand Config + Topic": {
+      "main": [
+        [
+          {
+            "node": "Parse Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Input": {
+      "main": [
+        [
+          {
+            "node": "Generate Video Package",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Video Package": {
+      "main": [
+        [
+          {
+            "node": "Save Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Generate Video Package",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Video Package Schema": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Generate Video Package",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Draft": {
+      "main": [
+        [
+          {
+            "node": "Await Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Await Approval": {
+      "main": [
+        [
+          {
+            "node": "Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved?": {
+      "main": [
+        [
+          {
+            "node": "Mark Approved",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Approved": {
+      "main": [
+        [
+          {
+            "node": "Render Config (EDIT ME)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render Config (EDIT ME)": {
+      "main": [
+        [
+          {
+            "node": "Worker Configured?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Worker Configured?": {
+      "main": [
+        [
+          {
+            "node": "Submit Render Job",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "STOP: Remotion Worker Not Configured",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit Render Job": {
+      "main": [
+        [
+          {
+            "node": "Prepare Polling",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Polling": {
+      "main": [
+        [
+          {
+            "node": "One Item per Poll Attempt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One Item per Poll Attempt": {
+      "main": [
+        [
+          {
+            "node": "Poll Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Before Poll": {
+      "main": [
+        [
+          {
+            "node": "Get Render Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Render Status": {
+      "main": [
+        [
+          {
+            "node": "Render State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render State": {
+      "main": [
+        [
+          {
+            "node": "Valid 1080x1920 MP4?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "STOP: Render Failed or Invalid",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Poll Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid 1080x1920 MP4?": {
+      "main": [
+        [
+          {
+            "node": "Video Ready",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "STOP: Render Failed or Invalid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Video Ready": {
+      "main": [
+        [
+          {
+            "node": "Prepare Instagram Reel",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare TikTok Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Instagram Reel": {
+      "main": [
+        [
+          {
+            "node": "DISABLED: Instagram Create Reel Container",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DISABLED: Instagram Create Reel Container": {
+      "main": [
+        [
+          {
+            "node": "DISABLED: Instagram Publish Container",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare TikTok Post": {
+      "main": [
+        [
+          {
+            "node": "DISABLED: TikTok Init Video Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Poll Loop": {
+      "main": [
+        [
+          {
+            "node": "STOP: Render Timed Out",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait Before Poll",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "nodeGroups": [
+    {
+      "id": "de23fa23-8325-415b-83e1-fea2e0d5cc11",
+      "name": "Draft video package",
+      "nodeIds": [
+        "14385454-a048-47ee-b617-7fed09cf080b",
+        "7def0288-71a2-452d-b4f4-6882b4811c6a",
+        "46b9f564-6d0f-4d0d-a193-d59283b2a54e",
+        "10458569-294b-4748-9f9a-548cac6451d0",
+        "a7be66d6-99e0-499f-96cf-c5c3392769fc"
+      ],
+      "description": "Takes the brand config and topic, has the AI write hooks, script, shot plan and captions, and saves the draft to a data table"
+    },
+    {
+      "id": "b181bd27-4761-48fc-bcb3-3f872315dc02",
+      "name": "Human approval gate",
+      "nodeIds": [
+        "789a90be-48bd-4913-825f-98da1ffbdec6",
+        "093cc23f-78e4-49e5-9c5d-971f81240e0b",
+        "5de46faa-d0b9-4b81-a328-36f674ce05f8",
+        "e4d886ed-f3a0-4108-a72f-4acbba2abd15"
+      ],
+      "description": "Pauses on an approval form; nothing renders or publishes until someone approves. Reject or 3-day expiry ends the run"
+    },
+    {
+      "id": "42089bdf-5955-4ea1-8d3a-6fc10483cc95",
+      "name": "Submit render job",
+      "nodeIds": [
+        "3fe8f703-eee9-405b-95a5-eb5f56b5d5d8",
+        "2e713109-3f4a-4498-b731-6fe60a989467",
+        "de4dd38f-a23c-4390-9c50-dae7d4142dd1",
+        "c241f008-12e9-46c3-8af3-5ba0f3131d5f"
+      ],
+      "description": "Checks the Remotion worker is configured, then sends the 1080x1920 MP4 render job to it"
+    },
+    {
+      "id": "ed85a95e-44e6-4eea-bc61-11cee0bc1ddc",
+      "name": "Poll render status",
+      "nodeIds": [
+        "18f80106-c393-4a4d-b5b1-e63fa92daff0",
+        "797866ff-602b-4e7a-aed0-f0afde8d5d16",
+        "3a4009b7-b806-4a35-981d-7703f51cee3b",
+        "e1adce0e-31e1-49a5-aa58-e5cc922f45b3",
+        "95de87ab-6e9e-488d-9550-62e115af5ada",
+        "7fb5c034-c25e-4f6e-9e7e-56c804dfc0fe",
+        "717b1cb5-8bd0-4452-920f-c89b4a40bdcb",
+        "bf46c653-84c8-4471-a197-a9dc1dc51213",
+        "4be2e847-567f-4f9a-850a-6c7b05bf2bb4",
+        "1fee98f4-5c8a-46e7-aef9-a7930826a922"
+      ],
+      "description": "Polls the worker on a timer, then checks the result is an https 1080x1920 MP4 of 20-30s. Stops on failure, timeout or bad metadata. No media is d"
+    },
+    {
+      "id": "3f235055-6816-45bb-9bc6-6d172dd12e2b",
+      "name": "Instagram publishing",
+      "nodeIds": [
+        "1d0c093a-9bbc-4c7e-985f-043436e66484",
+        "3199a8ee-b604-4093-9a9b-608a01a1491c",
+        "7a2d41eb-8d42-4bb0-89ae-bffd72b1cc91"
+      ],
+      "description": "Disabled placeholder for the official Instagram Graph API Reel publish; connect the token and enable to go live"
+    },
+    {
+      "id": "3090f98f-a4ad-43c1-b151-60178cafde6c",
+      "name": "TikTok publishing",
+      "nodeIds": [
+        "eb81c7a5-e6ba-4698-9d54-3758c00d62a2",
+        "1891bd08-8758-43ab-8b0c-04b77e362b6b"
+      ],
+      "description": "Disabled placeholder for the official TikTok Content Posting API; connect the token and enable to go live"
+    }
+  ],
+  "tags": []
+}

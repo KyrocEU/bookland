@@ -26,7 +26,7 @@ The Dockerfile copies `public/` into the image, so the recorded Bookland footage
 
 Fish Audio narration is optional and off by default. If you enable it, provide your own `FISH_API_KEY` privately and use a voice for which you have commercial rights. No Fish key or generated voice recording is in this repository. This worker renders videos; it does not auto-publish them.
 
-The private n8n draft points to the hosted worker and this 22-second composition, with a human approval gate. Instagram and TikTok API nodes remain disabled until their official upload integrations are verified. This repository contains the worker source and footage, not the private n8n credentials or a claim that unattended publishing works. See [publishing/README.md](publishing/README.md) for the remaining platform checks.
+The private n8n draft points to the hosted worker and this 22-second composition, with a human approval gate. A [sanitized importable workflow template](n8n/README.md) is included here. Instagram and TikTok API nodes remain disabled until their official upload integrations are verified. This repository contains no private n8n credentials or claim that unattended publishing works. See [publishing/README.md](publishing/README.md) for the remaining platform checks.
 
 The native EffectCraft edits used for final launch films are separate from this render worker. The footage here is included so maintainers can reproduce this specific Music demonstration. Replace it after an interface change and verify the new capture before presenting it as current product behavior.
 
