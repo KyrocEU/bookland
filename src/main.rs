@@ -6924,9 +6924,9 @@ impl DeskApp {
                 }
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
-                    if ui.add_enabled(!self.lyrics_lines.is_empty(), egui::Button::new(
-                        if self.lyrics_open { "Hide lyrics" } else { "Lyrics" }))
-                        .on_hover_text("Show synced lyrics").clicked() {
+                    if !self.lyrics_lines.is_empty()
+                        && small_button(ui, if self.lyrics_open { "Hide lyrics" } else { "Lyrics" })
+                            .on_hover_text("Show synced lyrics").clicked() {
                         self.lyrics_open = !self.lyrics_open;
                         self.airplay_open = false;
                         self.queue_open = false;
@@ -6984,12 +6984,10 @@ impl DeskApp {
                     }
                     label(ui, "Lyrics by LRCLIB", 10.0, MUTED);
                 } else {
-                    let airpods = self.airpods.compact_label()
-                        .unwrap_or_else(|| "No AirPods connected".into());
-                    label(ui, &airpods, 12.0, MUTED);
-                    if !self.lyrics_status.is_empty() && self.lyrics_for.is_some() {
-                        label(ui, &self.lyrics_status, 10.0, MUTED);
-                    }
+                    let source = self.airpods.compact_label().unwrap_or_else(||
+                        self.media_app.as_deref().map(|app| format!("SOURCE  ·  {app}"))
+                            .unwrap_or_else(|| "Play music on your Mac".into()));
+                    label(ui, &source, 12.0, MUTED);
                 }
             });
         if let Some(index) = gradient {
