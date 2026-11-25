@@ -1362,12 +1362,30 @@ fn system_media_control(action: &str) -> bool {
         "pause" => (1, "pause"),
         "next track" => (4, "next"),
         "previous track" => (5, "previous"),
+        "skip back 15 seconds" => (12, ""),
+        "skip forward 15 seconds" => (13, ""),
         "shuffle" => (6, "shuffle"),
         _ => return false,
     };
     media_remote_adapter::send(command)
-        || (action != "shuffle"
+        || (!name.is_empty()
             && system_media_script(&["control", name]).as_deref() == Some("sent"))
+}
+fn is_browser_media_app(app: Option<&str>) -> bool {
+    matches!(app, Some("Google Chrome" | "Safari" | "Arc" | "Microsoft Edge"))
+}
+fn media_skip_command(app: Option<&str>, backward: bool) -> &'static str {
+    match (is_browser_media_app(app), backward) {
+        (true, true) => "skip back 15 seconds",
+        (true, false) => "skip forward 15 seconds",
+        (false, true) => "previous track",
+        (false, false) => "next track",
+    }
+}
+fn browser_skip_target(position: f32, duration: f32, backward: bool) -> Option<f32> {
+    (position.is_finite() && duration.is_finite() && duration > 0.0).then(|| {
+        (position + if backward { -15.0 } else { 15.0 }).clamp(0.0, duration)
+    })
 }
 fn system_artwork() -> Result<Option<Vec<u8>>, String> {
     let encoded = system_media_script(&["artwork"])
@@ -1436,7 +1454,23 @@ fn system_media_from_value(value: &serde_json::Value) -> Option<MediaSnapshot> {
 }
 #[cfg(test)]
 mod system_media_tests {
-    use super::system_media_from_value;
+    use super::{browser_skip_target, media_skip_command, system_media_from_value};
+
+    #[test]
+    fn browser_media_seeks_while_music_changes_tracks() {
+        assert_eq!(media_skip_command(Some("Google Chrome"), true), "skip back 15 seconds");
+        assert_eq!(media_skip_command(Some("Safari"), false), "skip forward 15 seconds");
+        assert_eq!(media_skip_command(Some("Music"), true), "previous track");
+        assert_eq!(media_skip_command(Some("Spotify"), false), "next track");
+    }
+
+    #[test]
+    fn browser_skip_clamps_to_the_video_bounds() {
+        assert_eq!(browser_skip_target(10.0, 120.0, true), Some(0.0));
+        assert_eq!(browser_skip_target(10.0, 120.0, false), Some(25.0));
+        assert_eq!(browser_skip_target(115.0, 120.0, false), Some(120.0));
+        assert_eq!(browser_skip_target(f32::NAN, 120.0, false), None);
+    }
 
     #[test]
     fn adapter_snapshot_uses_parent_player_and_live_elapsed_time() {
@@ -4167,6 +4201,18 @@ impl DeskApp {
             let _ = sender.send((success, previous_playing));
         });
     }
+    fn skip_media(&mut self, backward: bool) {
+        if is_browser_media_app(self.media_app.as_deref()) {
+            let position = self.media_position
+                + if self.media_playing { self.last_media_poll.elapsed().as_secs_f32() } else { 0.0 };
+            if let Some(target) = browser_skip_target(position, self.media_duration, backward) {
+                // Browsers can ignore MediaRemote's relative-skip commands while honoring its seek.
+                self.media_action(&format!("set player position to {target}"));
+                return;
+            }
+        }
+        self.media_action(media_skip_command(self.media_app.as_deref(), backward));
+    }
     fn refresh_music_airplay(&mut self) {
         if self.airplay_rx.is_some() { return; }
         if running_media_app("Music").is_none() {
@@ -4263,11 +4309,12 @@ impl DeskApp {
     }
     fn media_controls(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            if small_button(ui, "|◀")
-                .on_hover_text("Previous track")
+            let browser = is_browser_media_app(self.media_app.as_deref());
+            if small_button(ui, if browser { "−15" } else { "|◀" })
+                .on_hover_text(if browser { "Back 15 seconds" } else { "Previous track" })
                 .clicked()
             {
-                self.media_action("previous track");
+                self.skip_media(true);
             }
             let play = small_button(ui, if self.media_playing { "Ⅱ" } else { "▶" })
                 .on_hover_text("Play or pause");
@@ -4276,8 +4323,9 @@ impl DeskApp {
             if play.clicked() {
                 self.media_action("playpause");
             }
-            if small_button(ui, "▶|").on_hover_text("Next track").clicked() {
-                self.media_action("next track");
+            if small_button(ui, if browser { "+15" } else { "▶|" })
+                .on_hover_text(if browser { "Forward 15 seconds" } else { "Next track" }).clicked() {
+                self.skip_media(false);
             }
             if self.prefs.extra_action == "Open app" {
                 if small_button(ui, "↗")
@@ -6181,12 +6229,19 @@ impl DeskApp {
                 ui.add_space(15.0);
                 ui.horizontal(|ui| {
                     ui.add_space(28.0);
-                    if ui.add(egui::Button::new(RichText::new("◀◀").size(17.0)).frame(false)).clicked() { self.media_action("previous track"); }
+                    let browser = is_browser_media_app(self.media_app.as_deref());
+                    if ui.add(egui::Button::new(RichText::new(if browser { "−15" } else { "◀◀" }).size(17.0)).frame(false))
+                        .on_hover_text(if browser { "Back 15 seconds" } else { "Previous track" }).clicked() {
+                        self.skip_media(true);
+                    }
                     if ui.add(egui::Button::new(RichText::new(
                         if self.media_playing { "Ⅱ" } else { "▶" }).size(17.0))
                         .fill(Color32::from_rgba_unmultiplied(222, 230, 250, 66))
                         .corner_radius(20).min_size(Vec2::splat(35.0))).clicked() { self.media_action("playpause"); }
-                    if ui.add(egui::Button::new(RichText::new("▶▶").size(17.0)).frame(false)).clicked() { self.media_action("next track"); }
+                    if ui.add(egui::Button::new(RichText::new(if browser { "+15" } else { "▶▶" }).size(17.0)).frame(false))
+                        .on_hover_text(if browser { "Forward 15 seconds" } else { "Next track" }).clicked() {
+                        self.skip_media(false);
+                    }
                 });
                 ui.add_space(11.0);
                 let old = self.volume;
@@ -6384,11 +6439,12 @@ impl DeskApp {
                                     ui.add_space(12.0);
                                     ui.horizontal(|ui| {
                                         ui.spacing_mut().item_spacing.x = 12.0;
+                                        let browser = is_browser_media_app(self.media_app.as_deref());
                                         if ui.add(egui::Button::new(
-                                            RichText::new("◀◀").size(18.0).color(Color32::WHITE))
+                                            RichText::new(if browser { "−15" } else { "◀◀" }).size(18.0).color(Color32::WHITE))
                                             .frame(false).min_size(Vec2::new(30.0, 27.0)))
-                                            .on_hover_text("Previous track").clicked() {
-                                            self.media_action("previous track");
+                                            .on_hover_text(if browser { "Back 15 seconds" } else { "Previous track" }).clicked() {
+                                            self.skip_media(true);
                                         }
                                         if ui.add(egui::Button::new(
                                             RichText::new(if self.media_playing { "Ⅱ" } else { "▶" })
@@ -6398,10 +6454,10 @@ impl DeskApp {
                                             self.media_action("playpause");
                                         }
                                         if ui.add(egui::Button::new(
-                                            RichText::new("▶▶").size(18.0).color(Color32::WHITE))
+                                            RichText::new(if browser { "+15" } else { "▶▶" }).size(18.0).color(Color32::WHITE))
                                             .frame(false).min_size(Vec2::new(30.0, 27.0)))
-                                            .on_hover_text("Next track").clicked() {
-                                            self.media_action("next track");
+                                            .on_hover_text(if browser { "Forward 15 seconds" } else { "Next track" }).clicked() {
+                                            self.skip_media(false);
                                         }
                                     });
                                 });
@@ -9579,8 +9635,8 @@ impl eframe::App for DeskApp {
                         self.opened_by_hover = false;
                         self.hover_blocked_until_exit = true;
                     }
-                    IslandGestureAction::Previous => self.media_action("previous track"),
-                    IslandGestureAction::Next => self.media_action("next track"),
+                    IslandGestureAction::Previous => self.skip_media(true),
+                    IslandGestureAction::Next => self.skip_media(false),
                     _ => {}
                 }
             }

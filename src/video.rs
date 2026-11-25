@@ -116,7 +116,7 @@ pub fn download(tool: &Path, url: &str, folder: &Path, tx: Sender<VideoEvent>) {
         let stderr = child.stderr.take().ok_or("No error stream")?;
         let errors = std::thread::spawn(move || {
             let mut recent = VecDeque::new();
-            for line in BufReader::new(stderr).lines().flatten() {
+            for line in BufReader::new(stderr).lines().map_while(Result::ok) {
                 recent.push_back(line);
                 if recent.len() > 100 { recent.pop_front(); }
             }
@@ -124,7 +124,7 @@ pub fn download(tool: &Path, url: &str, folder: &Path, tx: Sender<VideoEvent>) {
         });
         let output = child.stdout.take().ok_or("No progress stream")?;
         let mut completed = None;
-        for line in BufReader::new(output).lines().flatten() {
+        for line in BufReader::new(output).lines().map_while(Result::ok) {
             if let Some(progress) = parse_progress(&line) {
                 let _ = tx.send(VideoEvent::Progress(progress));
             } else {
