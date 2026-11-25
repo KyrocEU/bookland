@@ -12,9 +12,13 @@ The public GitHub traffic API reported 14 repository views from 3 unique visitor
 
 Keep the chosen cadence of one new film per day. Each film should demonstrate one verified action in the *real* Bookland island. Use the 1080 × 1920 vertical export, inspect it in the opened Reel view, and keep important text in the phone safe area. The on-screen first frame must show the product, not an isolated logo.
 
+The nearby category is crowded. For example, [Oriel 3.0's r/macapps launch](https://www.reddit.com/r/macapps/comments/1xjb7rb/i_took_your_feedback_and_made_oriel_30_the/) already advertises music, Codex status, calendar, file tools, and glass appearance. Do not claim Bookland is the only island with these features or lead with a longer feature list. Lead with a *visible Bookland action* and the open-source source/build path. This is a positioning hypothesis, not evidence of better reach.
+
 1. **Codex answer at a glance:** Start with the actual island and a changing connected-turn state. Show the real result and compact close. Use the existing private EffectCraft project as the source, but improve the phone readability before publication. The current recording starts with Agents expanded, so label any separate hover-open shot as an edit. Do not imply that desktop-owned Codex approval requests route into Bookland.
 2. **Music in one motion:** Show hover, a real 15-second rewind, the timestamp moving from 00:45 to 00:30, and close. The Music film published on 25 November is the baseline. Test a new, shorter first frame only after comparing its actual retention and interactions.
 3. **Open-source first look:** Show the small island in use, the public source and the MIT license, then ask for one specific test. Avoid an unverified performance or compatibility claim.
+
+For the Codex cut, test **“I asked Codex without leaving my work window.”** as spoken opening copy, with `CODEX IN THE ISLAND` over the real Bookland panel on frame one. The local `ig-reel` hook heuristic scored that line 77.8/100; this is a writing check, not a view prediction. Follow with the actual question entry, working state, answer, and deliberate click to fold. The existing v5 review has the full panel near the frame width but its internal text is too small at phone size; use a readable close-up of the changing state or answer before publication. Do not post the current v5 review as a finished film.
 
 Test different narrators deliberately. The six existing Fish Audio auditions provide female and male options; choose a voice for each concept after listening and checking the final mix. Keep narration rights, captions, and AI audio disclosures appropriate for each platform. Do not publish six near-identical edits just to test a voice.
 
