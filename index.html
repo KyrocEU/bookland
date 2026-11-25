@@ -18,8 +18,8 @@
   <meta name="twitter:description" content="Music, useful tools, and Codex activity at the top edge of your Mac. Free and open source.">
   <meta name="twitter:image" content="https://kyroceu.github.io/bookland/social-preview.png">
   <link rel="icon" type="image/png" href="./bookland-icon.png">
-  <link rel="stylesheet" href="./style.css?v=4">
-  <script defer src="./main.js?v=4"></script>
+  <link rel="stylesheet" href="./style.css?v=5">
+  <script defer src="./main.js?v=5"></script>
   <title>Bookland — A living island for your Mac</title>
 </head>
 <body>
@@ -123,14 +123,14 @@
         <p>These are captures from the current macOS build. The island uses native system material, so its glass responds to the desktop behind it.</p>
       </div>
       <figure class="capture-hero">
-        <img src="./media/app-nook.png" alt="Bookland Nook showing music, system pulse, focus timer, tasks and the workspace switcher" loading="lazy" width="2138" height="490">
+        <button class="capture-zoom" type="button" aria-label="Enlarge Nook screenshot"><img src="./media/app-nook.png" alt="Bookland Nook showing music, system pulse, focus timer, tasks and the workspace switcher" loading="lazy" width="2138" height="490"></button>
         <figcaption><strong>Nook</strong><span>Music, focus, and a quick system pulse in one glance.</span></figcaption>
       </figure>
       <div class="capture-grid">
-        <figure class="capture-card"><img src="./media/app-music.png" alt="Bookland Music workspace with playback controls, seek bar and volume" loading="lazy" width="1258" height="950"><figcaption><strong>Music</strong><span>Playback stays close to what you are doing.</span></figcaption></figure>
-        <figure class="capture-card"><img src="./media/app-calendar.png" alt="Bookland Calendar month view before a calendar is connected" loading="lazy" width="1258" height="1120"><figcaption><strong>Calendar</strong><span>Dates are ready; events appear after you connect macOS Calendar.</span></figcaption></figure>
-        <figure class="capture-card"><img src="./media/app-pocket.png" alt="Bookland Tray workspace with file Pocket and video download controls" loading="lazy" width="1258" height="1080"><figcaption><strong>Tray & Pocket</strong><span>Keep files and clipboard history within reach.</span></figcaption></figure>
-        <figure class="capture-card"><img src="./media/app-prompts.png" alt="Bookland sheet prompt builder in the Agents workspace" loading="lazy" width="1258" height="1080"><figcaption><strong>Prompts</strong><span>Turn a spreadsheet task into a reusable prompt.</span></figcaption></figure>
+        <figure class="capture-card"><button class="capture-zoom" type="button" aria-label="Enlarge Music screenshot"><img src="./media/app-music.png" alt="Bookland Music controlling a Chrome track with play, previous and next track, 15-second seek, timeline, and volume" loading="lazy" width="1258" height="950"></button><figcaption><strong>Music</strong><span>Tracks, 15-second seeks, and volume beside the camera.</span></figcaption></figure>
+        <figure class="capture-card calendar-capture"><button class="capture-zoom" type="button" aria-label="Enlarge Calendar screenshot"><img src="./media/app-calendar.png?v=6" alt="Bookland Calendar showing a connected month with event markers on dates" loading="lazy" width="762" height="484"></button><figcaption><strong>Calendar</strong><span>See the month and event markers from calendars connected to macOS.</span></figcaption></figure>
+        <figure class="capture-card"><button class="capture-zoom" type="button" aria-label="Enlarge Tray screenshot"><img src="./media/app-pocket.png" alt="Bookland Tray workspace with file Pocket and video download controls" loading="lazy" width="1258" height="1080"></button><figcaption><strong>Tray & Pocket</strong><span>Keep files and clipboard history within reach.</span></figcaption></figure>
+        <figure class="capture-card"><button class="capture-zoom" type="button" aria-label="Enlarge Prompts screenshot"><img src="./media/app-prompts.png" alt="Bookland sheet prompt builder in the Agents workspace" loading="lazy" width="1258" height="1080"></button><figcaption><strong>Prompts</strong><span>Turn a spreadsheet task into a reusable prompt.</span></figcaption></figure>
       </div>
     </section>
 
@@ -138,14 +138,11 @@
       <div class="wrap">
         <div class="section-intro films-intro">
           <p class="kicker">SEE IT MOVE</p>
-          <h2 id="films-title">A little motion.<br><span>A lot of Mac.</span></h2>
-          <p>Three 25-second Bookland stories with different hooks, expressive narration, and a closer look at the whole island. The films mix app captures with clearly marked illustrations; the screenshots above show the running app.</p>
+          <h2 id="films-title">See the island work.<br><span>Right beside the camera.</span></h2>
+          <p>This recorded Mac demo shows Bookland opening, moving a YouTube video back 15 seconds, and closing again. The control and its result appear in the same take.</p>
         </div>
-        <p class="film-swipe-hint">Swipe to see all three films →</p>
-        <div class="film-grid">
-          <figure class="film-card"><video controls playsinline preload="none" poster="./media/main-01-one-place-poster.jpg?v=4" aria-label="Bookland One Place film"><source src="./media/main-01-one-place.mp4?v=4" type="video/mp4">Your browser does not support video.</video><figcaption><strong>One place</strong><span>Music, calendar, focus, files, prompts and connected Codex progress.</span></figcaption></figure>
-          <figure class="film-card"><video controls playsinline preload="none" poster="./media/main-02-come-alive-poster.jpg?v=4" aria-label="Bookland Come Alive film"><source src="./media/main-02-come-alive.mp4?v=4" type="video/mp4">Your browser does not support video.</video><figcaption><strong>Come alive</strong><span>Hover to reveal the island, then move away to close it.</span></figcaption></figure>
-          <figure class="film-card"><video controls playsinline preload="none" poster="./media/main-03-make-it-yours-poster.jpg?v=4" aria-label="Bookland Make It Yours film"><source src="./media/main-03-make-it-yours.mp4?v=4" type="video/mp4">Your browser does not support video.</video><figcaption><strong>Make it yours</strong><span>A free, open-source island that invites you to build with us.</span></figcaption></figure>
+        <div class="film-grid film-grid--single">
+          <figure class="film-card"><video controls playsinline preload="none" poster="./media/bookland-music-real-poster.jpg" aria-label="Recorded Bookland Music island demo"><source src="./media/bookland-music-real.mp4" type="video/mp4">Your browser does not support video.</video><figcaption><strong>Music without leaving your work.</strong><span>Real Bookland footage · 22 seconds · 15-second seek shown in the Mac app.</span></figcaption></figure>
         </div>
       </div>
     </section>
@@ -166,7 +163,7 @@
 
     <section class="flow wrap" aria-labelledby="flow-title">
       <div><p class="kicker">THE SMALL DETAILS</p><h2 id="flow-title">Made to feel at home<br><span>at the top of the screen.</span></h2></div>
-      <div class="flow-list"><div><p><strong>Hover and it opens.</strong> The closed strip wraps the camera cutout, then expands with a native animated silhouette.</p></div><div><p><strong>Choose what you need.</strong> A compact floating pill switches between music, Calendar, Tray, and Agents.</p></div><div><p><strong>Move on.</strong> The island closes after you leave. Click it when you want the panel to stay until Escape.</p></div></div>
+      <div class="flow-list"><div><p><strong>Hover and it opens.</strong> The closed strip wraps the camera cutout, then expands with a native animated silhouette.</p></div><div><p><strong>Choose what you need.</strong> A compact floating pill switches between music, Calendar, Tray, and Agents.</p></div><div><p><strong>Move on.</strong> The island closes after you leave. Right-click and choose Open Nook when you want to keep it open.</p></div></div>
     </section>
 
     <section class="source-section" id="open-source" aria-labelledby="source-title">
@@ -189,5 +186,9 @@
   </main>
 
   <footer class="footer"><div class="wrap footer-inner"><div class="footer-brand"><img src="./bookland-icon.png" width="34" height="34" alt=""><span>Bookland</span></div><p>A living island for your Mac.</p><div class="footer-links"><a href="https://github.com/KyrocEU/bookland" target="_blank" rel="noopener noreferrer">GitHub</a><a href="https://www.instagram.com/bookland_pro/" target="_blank" rel="noopener noreferrer">Instagram</a><a href="https://www.tiktok.com/@bookland.pro" target="_blank" rel="noopener noreferrer">TikTok</a><a href="https://www.reddit.com/user/BookLandPro/" target="_blank" rel="noopener noreferrer">Reddit</a><a href="https://github.com/KyrocEU/bookland/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a></div></div></footer>
+  <dialog class="capture-lightbox" aria-labelledby="capture-lightbox-title">
+    <div class="capture-lightbox-bar"><h2 id="capture-lightbox-title"></h2><button class="capture-lightbox-close" type="button" aria-label="Close screenshot">✕</button></div>
+    <img alt="">
+  </dialog>
 </body>
 </html>

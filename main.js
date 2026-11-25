@@ -52,6 +52,25 @@ copyButton?.addEventListener('click', async () => {
   window.setTimeout(() => { copyButton.textContent = 'Copy commands'; }, 2500);
 });
 
+const captureLightbox = document.querySelector('.capture-lightbox');
+const captureLightboxImage = captureLightbox?.querySelector('img');
+const captureLightboxTitle = captureLightbox?.querySelector('h2');
+for (const button of document.querySelectorAll('.capture-zoom')) {
+  button.addEventListener('click', () => {
+    const image = button.querySelector('img');
+    if (!captureLightbox || !image) return;
+    captureLightboxImage.src = image.currentSrc || image.src;
+    captureLightboxImage.alt = image.alt;
+    captureLightboxTitle.textContent = button.closest('figure')?.querySelector('figcaption strong')?.textContent || 'Bookland';
+    captureLightbox.showModal();
+  });
+}
+captureLightbox?.querySelector('.capture-lightbox-close')?.addEventListener('click', () => captureLightbox.close());
+captureLightbox?.addEventListener('click', (event) => {
+  if (event.target === captureLightbox) captureLightbox.close();
+});
+captureLightbox?.addEventListener('close', () => captureLightboxImage.removeAttribute('src'));
+
 // One-shot section reveals and a compositor-only reading line. No scroll work
 // is scheduled while the page is still, and reduced-motion visitors see every
 // section immediately.
