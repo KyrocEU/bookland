@@ -53,7 +53,7 @@ Camera, microphone/speech, Calendar, system audio spectrum, and global shortcuts
 
 ## Download and install
 
-Download the [latest Bookland release](https://github.com/KyrocEU/bookland/releases/latest), extract `Bookland-0.1.1-macOS-26.0.zip`, and move `Bookland.app` to Applications. Open it from Applications. Bookland is a menu-bar-style utility and appears at the top edge of the screen. The release is built for Apple Silicon and requires macOS 26 or later. It is ad hoc signed and not notarized; macOS may require **System Settings → Privacy & Security → Open Anyway** after the first launch attempt. The release page includes a SHA-256 checksum.
+Download the [latest Bookland release](https://github.com/KyrocEU/bookland/releases/latest), extract `Bookland-0.1.1-macOS-26.0.zip`, and move `Bookland.app` to Applications. Open it from Applications. Bookland is a menu-bar-style utility and appears at the top edge of the screen. The release is built for Apple Silicon and requires macOS 26 or later. It uses a local self-signed code-signing identity and is not Apple-notarized; macOS may require **System Settings → Privacy & Security → Open Anyway** after the first launch attempt. The release page includes a SHA-256 checksum.
 
 ## Build and run
 
