@@ -25,9 +25,9 @@ Use the macOS system typeface for app UI. Use a clean sans-serif wordmark in mar
 
 ## Marketing assets
 
-- `bookland-launch-hero.png`: campaign banner and README opener.
-- `bookland-banner.svg`: editable, text-sharp alternate banner.
-- `social-preview.png`: 1280×640 repository social preview candidate.
+- `bookland-launch-hero.png`: 1672×941 README opener with the premium icon and an illustrative Music/Codex island.
+- `bookland-banner.svg`: editable source for the opener, using `bookland-glass-backdrop.png` as its background plate.
+- `social-preview.png`: 1280×640 GitHub social preview derived from the same composition.
 - `bookland-icon-premium.png`: app icon and press kit image.
 - `bookland-social-avatar.png`: circular social avatar with a larger book mark; used on Instagram and TikTok.
 - `bookland-reddit-banner.jpg`: 1000×300 Reddit profile banner, 40.5 KB.

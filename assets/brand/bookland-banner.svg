@@ -1,27 +1,63 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="800" viewBox="0 0 1600 800" role="img" aria-label="Bookland: a living island for your Mac">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1672" height="941" viewBox="0 0 1672 941" role="img" aria-label="Bookland, a living island for your Mac">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#101A29"/><stop offset="0.55" stop-color="#080D16"/><stop offset="1" stop-color="#04070E"/></linearGradient>
-    <radialGradient id="glow"><stop offset="0" stop-color="#4A9FE9" stop-opacity="0.22"/><stop offset="1" stop-color="#4A9FE9" stop-opacity="0"/></radialGradient>
-    <linearGradient id="bookL" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#BBD6F4"/></linearGradient>
-    <linearGradient id="bookR" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#A9DDFF"/><stop offset="1" stop-color="#5B95E9"/></linearGradient>
-    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#C7DBF5" stop-opacity="0.18"/><stop offset="1" stop-color="#8FB2E2" stop-opacity="0.05"/></linearGradient>
+    <linearGradient id="shade"><stop stop-color="#050A13" stop-opacity=".77"/><stop offset=".52" stop-color="#050A13" stop-opacity=".48"/><stop offset="1" stop-color="#050A13" stop-opacity=".07"/></linearGradient>
+    <linearGradient id="glass" x2="1" y2="1"><stop stop-color="#D7F3FF" stop-opacity=".25"/><stop offset=".48" stop-color="#5B95E9" stop-opacity=".17"/><stop offset="1" stop-color="#071426" stop-opacity=".72"/></linearGradient>
+    <linearGradient id="edge" x2="1" y2="1"><stop stop-color="#F4F8FF" stop-opacity=".6"/><stop offset="1" stop-color="#79B3F7" stop-opacity=".15"/></linearGradient>
+    <linearGradient id="album" x2="1" y2="1"><stop stop-color="#DBF2FF"/><stop offset=".48" stop-color="#6FAAFF"/><stop offset="1" stop-color="#17427C"/></linearGradient>
+    <filter id="shadow" x="-20%" y="-30%" width="150%" height="170%"><feGaussianBlur stdDeviation="27"/></filter>
+    <clipPath id="screen"><rect x="823" y="171" width="754" height="681" rx="36"/></clipPath>
   </defs>
-  <rect width="1600" height="800" fill="url(#bg)"/>
-  <ellipse cx="380" cy="400" rx="560" ry="520" fill="url(#glow)"/>
-  <rect x="83" y="126" width="548" height="548" rx="134" fill="#172539" fill-opacity="0.52" stroke="#B9D8FF" stroke-opacity="0.25" stroke-width="3"/>
-  <g transform="translate(110 146) scale(.48)">
-    <path d="M512 370 C438 314 348 297 256 323 Q235 329 235 352 L235 665 Q235 688 259 680 C361 655 444 676 512 729 Z" fill="url(#bookL)"/>
-    <path d="M512 370 C586 314 676 297 768 323 Q789 329 789 352 L789 665 Q789 688 765 680 C663 655 580 676 512 729 Z" fill="url(#bookR)"/>
-    <path d="M512 370 V729" stroke="#A4DEFF" stroke-width="16" stroke-linecap="round"/>
-    <path d="M279 367 C363 348 426 365 483 402 M279 432 C363 413 426 430 483 467 M279 497 C363 478 426 495 483 532" fill="none" stroke="#385F9A" stroke-opacity="0.33" stroke-width="12" stroke-linecap="round"/>
-    <path d="M745 367 C661 348 598 365 541 402 M745 432 C661 413 598 430 541 467 M745 497 C661 478 598 495 541 532" fill="none" stroke="#E4F6FF" stroke-opacity="0.28" stroke-width="12" stroke-linecap="round"/>
-    <path d="M512 333 L526 351 L512 369 L498 351 Z" fill="#D4F9FF"/>
+  <image xlink:href="bookland-glass-backdrop.png" width="1672" height="941"/>
+  <rect width="1672" height="941" fill="url(#shade)"/>
+  <image xlink:href="bookland-icon-premium.png" x="100" y="94" width="138" height="138"/>
+  <text x="252" y="174" fill="#F4F8FF" font-family="Helvetica Neue, Arial" font-size="47" font-weight="700">Bookland</text>
+  <text x="108" y="310" fill="#BBDFFF" font-family="Helvetica Neue, Arial" font-size="23" font-weight="700" letter-spacing="4">A LIVING ISLAND FOR YOUR MAC</text>
+  <text x="103" y="425" fill="#F4F8FF" font-family="Helvetica Neue, Arial" font-size="92" font-weight="700" letter-spacing="-4">Your MacBook.</text>
+  <text x="103" y="530" fill="#F4F8FF" font-family="Helvetica Neue, Arial" font-size="92" font-weight="700" letter-spacing="-4">More alive.</text>
+  <text x="109" y="620" fill="#D5E8FA" font-family="Helvetica Neue, Arial" font-size="31">Hover beside the camera. Keep media,</text>
+  <text x="109" y="663" fill="#D5E8FA" font-family="Helvetica Neue, Arial" font-size="31">Calendar, and Codex within reach.</text>
+  <rect x="109" y="725" width="250" height="57" rx="28" fill="#D7F3FF" fill-opacity=".12" stroke="#D7F3FF" stroke-opacity=".36"/>
+  <circle cx="142" cy="753" r="7" fill="#8BC3FF"/>
+  <text x="162" y="761" fill="#F4F8FF" font-family="Helvetica Neue, Arial" font-size="20" font-weight="600">Free &amp; open source</text>
+  <text x="109" y="846" fill="#A9C4E3" font-family="Helvetica Neue, Arial" font-size="19" letter-spacing="1.5">BUILT FOR macOS 26+</text>
+
+  <rect x="808" y="158" width="788" height="716" rx="45" fill="#000" opacity=".5" filter="url(#shadow)"/>
+  <rect x="807" y="147" width="781" height="717" rx="44" fill="#030915" stroke="#B1D5FF" stroke-opacity=".36" stroke-width="2"/>
+  <g clip-path="url(#screen)">
+    <rect x="823" y="171" width="754" height="681" fill="#071529"/>
+    <path d="M823 636 C1091 412 1287 528 1577 290 V852 H823Z" fill="#1A4D8D" opacity=".55"/>
+    <path d="M823 707 C1050 560 1278 614 1577 416" fill="none" stroke="#A4D4FF" stroke-opacity=".4" stroke-width="2"/>
   </g>
-  <text x="711" y="300" fill="#F5F8FF" font-family="-apple-system, BlinkMacSystemFont, Helvetica Neue, Arial, sans-serif" font-size="112" font-weight="700" letter-spacing="-5">Bookland</text>
-  <text x="718" y="371" fill="#AFC1D8" font-family="-apple-system, BlinkMacSystemFont, Helvetica Neue, Arial, sans-serif" font-size="33" font-weight="400">A living island for your Mac.</text>
-  <rect x="716" y="432" width="694" height="88" rx="44" fill="url(#glass)" stroke="#C8E5FF" stroke-opacity="0.34" stroke-width="2"/>
-  <circle cx="769" cy="476" r="8" fill="#74D7F2"/>
-  <text x="798" y="486" fill="#E5F1FF" font-family="-apple-system, BlinkMacSystemFont, Helvetica Neue, Arial, sans-serif" font-size="27" font-weight="500">Liquid Glass  ·  Media  ·  Codex</text>
-  <text x="718" y="636" fill="#7893B4" font-family="-apple-system, BlinkMacSystemFont, Helvetica Neue, Arial, sans-serif" font-size="22" letter-spacing="3">BUILT FOR macOS</text>
-  <path d="M1330 643 h80" stroke="#85CEED" stroke-width="3" stroke-linecap="round" opacity="0.65"/>
+  <rect x="1064" y="147" width="270" height="61" rx="30" fill="#000"/>
+  <circle cx="1120" cy="174" r="9" fill="#2B4B6B"/>
+  <rect x="858" y="260" width="681" height="420" rx="41" fill="#000" opacity=".47" filter="url(#shadow)"/>
+  <rect x="851" y="244" width="680" height="416" rx="40" fill="url(#glass)" stroke="url(#edge)" stroke-width="2"/>
+  <path d="M893 246 H1485" stroke="#EAF8FF" stroke-opacity=".45" stroke-width="2"/>
+  <text x="894" y="306" fill="#D7F3FF" font-family="Helvetica Neue, Arial" font-size="18" font-weight="700" letter-spacing="3">MUSIC</text>
+  <text x="1486" y="306" fill="#C3DDF7" font-family="Helvetica Neue, Arial" font-size="18" text-anchor="end">Google Chrome</text>
+  <rect x="894" y="339" width="111" height="111" rx="26" fill="url(#album)" stroke="#D7F3FF" stroke-opacity=".5"/>
+  <path d="M925 371 Q951 361 979 373 M925 389 Q951 379 979 391 M925 407 Q951 397 979 409" fill="none" stroke="#F4F8FF" stroke-opacity=".76" stroke-width="5" stroke-linecap="round"/>
+  <text x="1032" y="377" fill="#F4F8FF" font-family="Helvetica Neue, Arial" font-size="28" font-weight="600">That black bar on your MacBook?</text>
+  <text x="1032" y="411" fill="#BFD7F5" font-family="Helvetica Neue, Arial" font-size="21">BookLand · YouTube Short</text>
+  <rect x="1030" y="431" width="64" height="39" rx="12" fill="#EAF5FF" fill-opacity=".16"/>
+  <rect x="1105" y="431" width="58" height="39" rx="12" fill="#A2CBFF" fill-opacity=".32"/>
+  <rect x="1174" y="431" width="64" height="39" rx="12" fill="#EAF5FF" fill-opacity=".16"/>
+  <text x="1062" y="457" fill="#F4F8FF" font-family="Helvetica Neue, Arial" font-size="18" text-anchor="middle">−15</text>
+  <text x="1134" y="458" fill="#F4F8FF" font-family="Helvetica Neue, Arial" font-size="21" text-anchor="middle">Ⅱ</text>
+  <text x="1206" y="457" fill="#F4F8FF" font-family="Helvetica Neue, Arial" font-size="18" text-anchor="middle">+15</text>
+  <rect x="894" y="500" width="592" height="6" rx="3" fill="#D7F3FF" fill-opacity=".22"/>
+  <rect x="894" y="500" width="290" height="6" rx="3" fill="#9CCEFF"/>
+  <circle cx="1184" cy="503" r="9" fill="#E4F6FF"/>
+  <text x="894" y="538" fill="#B3CDEC" font-family="Helvetica Neue, Arial" font-size="16">00:13</text>
+  <text x="1486" y="538" fill="#B3CDEC" font-family="Helvetica Neue, Arial" font-size="16" text-anchor="end">00:25</text>
+  <line x1="894" y1="563" x2="1486" y2="563" stroke="#D7F3FF" stroke-opacity=".2"/>
+  <circle cx="903" cy="607" r="7" fill="#85BDFF"/>
+  <text x="924" y="615" fill="#D7F3FF" font-family="Helvetica Neue, Arial" font-size="18" font-weight="700" letter-spacing="2">CODEX</text>
+  <text x="1045" y="615" fill="#F4F8FF" font-family="Helvetica Neue, Arial" font-size="22">Working on your build</text>
+  <rect x="1059" y="704" width="270" height="70" rx="35" fill="#000" opacity=".45" filter="url(#shadow)"/>
+  <rect x="1057" y="697" width="270" height="70" rx="35" fill="#06111F" stroke="#D7F3FF" stroke-opacity=".42"/>
+  <circle cx="1102" cy="732" r="20" fill="#254775"/>
+  <text x="1102" y="742" fill="#D7F3FF" font-family="Helvetica Neue, Arial" font-size="27" text-anchor="middle">♫</text>
+  <text x="1142" y="741" fill="#F4F8FF" font-family="Helvetica Neue, Arial" font-size="23">Music</text>
+  <text x="1270" y="741" fill="#C8E2F8" font-family="Helvetica Neue, Arial" font-size="23">✦</text>
 </svg>
