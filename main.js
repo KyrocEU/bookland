@@ -86,7 +86,7 @@ let stopScrollMotion = () => {};
 function startScrollMotion() {
   if (motionPreference.matches || !('IntersectionObserver' in window)) return;
   const revealNodes = Array.from(document.querySelectorAll(
-    '.hero-product, .section-intro, .demo, .capture-hero, .capture-card, .film-card, .feature, .flow-list > div, .source-layout > div, .faq-list details'
+    '.section-intro, .demo, .capture-hero, .capture-card, .film-card, .feature, .flow-list > div, .source-layout > div, .faq-list details'
   ));
   for (const node of revealNodes) {
     node.classList.add('scroll-reveal');
