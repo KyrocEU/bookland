@@ -11,8 +11,18 @@ body:
     id: environment
     attributes:
       label: Mac and macOS
-      description: For example, MacBook Pro M3 on macOS 26.1.
+      description: If you installed the preview, for example MacBook Pro M3 on macOS 26.1. Leave this blank if you only watched the demo.
       placeholder: Mac model and macOS version
+    validations:
+      required: false
+  - type: dropdown
+    id: tried
+    attributes:
+      label: How did you try Bookland?
+      options:
+        - Installed the macOS preview
+        - Watched the real Mac demo
+        - Read the source
     validations:
       required: true
   - type: dropdown
@@ -27,6 +37,7 @@ body:
         - Tray or Pocket
         - Nook or Focus
         - Settings
+        - Visual design or animation
         - Something else
     validations:
       required: true

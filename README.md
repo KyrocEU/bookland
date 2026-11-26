@@ -2,7 +2,7 @@
 
 # Bookland
 
-[Download Bookland 0.1.4](https://github.com/KyrocEU/bookland/releases/latest) · [Watch Bookland in motion](https://kyroceu.github.io/bookland/#films) · [Website](https://kyroceu.github.io/bookland/) · [Discuss and review Bookland](https://github.com/KyrocEU/bookland/discussions/2)
+[Download Bookland 0.1.4](https://github.com/KyrocEU/bookland/releases/latest) · [Watch the real Mac walkthrough](https://kyroceu.github.io/bookland/#build-with-us) · [Website](https://kyroceu.github.io/bookland/) · [Discuss and review Bookland](https://github.com/KyrocEU/bookland/discussions/2)
 
 Follow the build: [YouTube](https://www.youtube.com/@booklandmac) · [X](https://x.com/booklandmac) · [Instagram](https://www.instagram.com/bookland_pro/) · [TikTok](https://www.tiktok.com/@bookland.pro). If you try the preview, [tell us one thing that worked or felt off](https://github.com/KyrocEU/bookland/discussions/2). One sentence is useful; include Mac details when reporting a bug.
 
@@ -15,6 +15,12 @@ Bookland is free and open source, with no Bookland account, trial, or subscripti
 1. On an Apple Silicon Mac running macOS 26 or later, download the [Bookland 0.1.4 ZIP](https://github.com/KyrocEU/bookland/releases/download/v0.1.4/Bookland-0.1.4-macOS-26.0.zip). The [release page](https://github.com/KyrocEU/bookland/releases/tag/v0.1.4) has its SHA-256 checksum and signing notes.
 2. Extract the ZIP, move `Bookland.app` to Applications, and open it. Bookland appears beside the camera rather than in the Dock. The build is locally signed but not Apple-notarized, so macOS may ask you to use **System Settings → Privacy & Security → Open Anyway** after the first launch attempt.
 3. Hover beside the camera, try one real action in Music, Calendar, or Codex, and move the pointer away. Tell us what happened in the [first-look discussion](https://github.com/KyrocEU/bookland/discussions/2); use the [feedback form](https://github.com/KyrocEU/bookland/issues/new?template=first-look.yml) if you can name a specific problem.
+
+![The current Bookland Nook running on macOS with media controls, Pulse, a focus timer, tasks, and the floating workspace switcher](assets/launch/real-nook.png)
+
+*Real Mac capture from the current preview. The native glass changes with the desktop behind it.*
+
+If you only watched the demo, you can still use the [first-look form](https://github.com/KyrocEU/bookland/issues/new?template=first-look.yml) to tell us which part looked useful or confusing. Choose **Watched the real Mac demo**; Mac details are optional for that kind of feedback.
 
 [Watch the real Mac demo](https://kyroceu.github.io/bookland/#films) before installing. The preview is for testing: the [current limits](#current-limits) matter, especially for macOS permissions and player-specific media controls.
 
