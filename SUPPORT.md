@@ -19,6 +19,6 @@ the [troubleshooting guide](docs/TROUBLESHOOTING.md) for common setup problems.
   issue before a large change.
 
 Do not post private calendar entries, account names, API keys, or unredacted
-logs and screenshots in public issues or discussions. Keep details of a
-potential security vulnerability private; the project does not yet have a
-dedicated private vulnerability reporting channel.
+logs and screenshots in public issues or discussions. For a possible security
+vulnerability, use the **Report a vulnerability** button on GitHub's [Security Advisories page](https://github.com/KyrocEU/bookland/security/advisories)
+instead of a public issue; see [SECURITY.md](SECURITY.md).
