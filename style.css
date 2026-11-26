@@ -199,6 +199,7 @@ h2 { font-size: clamp(2.8rem, 5vw, 4.8rem); line-height: 1.08; font-weight: 700;
 .guide-episodes { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; width: 100%; padding-top: 32px; border-top: 1px solid rgba(205,232,255,.15); }
 .guide-episode { display: flex; align-items: center; gap: clamp(18px, 3vw, 30px); min-width: 0; padding: 16px; border: 1px solid rgba(208,233,255,.19); border-radius: 25px; background: linear-gradient(125deg, rgba(183,218,255,.11), rgba(34,72,121,.11) 55%, rgba(3,12,29,.35)); box-shadow: inset 0 1px rgba(255,255,255,.09), 0 15px 42px rgba(0,0,0,.13); }
 .guide-episode--featured { grid-column: 1 / -1; background: radial-gradient(circle at 20% 50%, rgba(95,159,246,.19), transparent 43%), linear-gradient(125deg, rgba(183,218,255,.12), rgba(10,27,56,.72)); }
+.guide-episode--wide { grid-column: 1 / -1; background: radial-gradient(circle at 20% 50%, rgba(95,159,246,.15), transparent 43%), linear-gradient(125deg, rgba(183,218,255,.1), rgba(10,27,56,.62)); }
 .guide-episode.guide-episode--featured video { width: clamp(150px, 15vw, 210px); }
 .guide-episode video { display: block; width: clamp(125px, 12vw, 175px); flex: none; aspect-ratio: 9 / 16; border-radius: 17px; background: #040915; object-fit: contain; }
 .guide-episode-day { color: #a1d0ff; font-size: .68rem; font-weight: 760; letter-spacing: .13em; }
