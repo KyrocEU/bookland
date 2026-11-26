@@ -9597,6 +9597,16 @@ impl eframe::App for DeskApp {
         if target_changed {
             self.native_morph_pending = true;
             self.native_morph_animating = false;
+            // The idle media snapshot can be almost five seconds old. Refresh
+            // once when the island opens so newly started browser playback is
+            // visible without increasing the background polling rate.
+            if self.expanded && self.screenshot.is_none() && !self.preview_mode {
+                // An idle request may already be in flight. Drop its receiver
+                // so this open reads the current player instead of waiting for
+                // an older snapshot to reset the five-second timer.
+                self.media_rx = None;
+                self.last_media_request = Instant::now() - Duration::from_secs(6);
+            }
         }
         // Start moving on the first frame after a hover event. Zeroing this
         // frame added a full display interval to the apparent hover latency.
