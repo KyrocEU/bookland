@@ -2,7 +2,7 @@
 
 # Bookland
 
-[Download Bookland 0.1.4](https://github.com/KyrocEU/bookland/releases/latest) · [Watch the real Mac walkthrough](https://kyroceu.github.io/bookland/#build-with-us) · [Website](https://kyroceu.github.io/bookland/) · [Discuss and review Bookland](https://github.com/KyrocEU/bookland/discussions/2) · [Help and troubleshooting](SUPPORT.md)
+[Download Bookland 0.1.4](https://github.com/KyrocEU/bookland/releases/latest) · [Watch the real Mac walkthrough](https://kyroceu.github.io/bookland/watch.html) · [Website](https://kyroceu.github.io/bookland/) · [Discuss and review Bookland](https://github.com/KyrocEU/bookland/discussions/2) · [Help and troubleshooting](SUPPORT.md)
 
 Follow the build: [YouTube](https://www.youtube.com/@booklandmac) · [X](https://x.com/booklandmac) · [Instagram](https://www.instagram.com/bookland_pro/) · [TikTok](https://www.tiktok.com/@bookland.pro). If you try the preview, [tell us one thing that worked or felt off](https://github.com/KyrocEU/bookland/discussions/2). One sentence is useful; include Mac details when reporting a bug.
 
